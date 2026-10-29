@@ -1,19 +1,24 @@
 import Link from "next/link";
 import { requireMaitre } from "@/lib/auth";
-import { createUserClient } from "@/lib/supabase/server";
+import { createServiceClient, createUserClient } from "@/lib/supabase/server";
 import { getSeasons } from "@/lib/data";
 import { PageTitle, Panel, SectionTitle, Tag } from "@/components/ui";
-import { SeasonForm, SettingsForm } from "./forms";
+import { rememberSiteUrl } from "@/lib/origin";
+import { NotificationSettingsForm, SeasonForm, SettingsForm } from "./forms";
 
 export const metadata = { title: "Règles et saisons" };
 
 export default async function SettingsPage() {
   await requireMaitre();
   const supabase = await createUserClient();
-  const [{ data: settings }, seasons] = await Promise.all([
+  const admin = createServiceClient();
+  const [{ data: settings }, seasons, { data: subs }, siteUrl] = await Promise.all([
     supabase.from("app_settings").select("*").eq("id", 1).single(),
     getSeasons(supabase),
+    admin.from("push_subscriptions").select("user_id"),
+    rememberSiteUrl(admin),
   ]);
+  const subscribed = new Set((subs ?? []).map((s) => s.user_id)).size;
 
   return (
     <div className="space-y-5">
@@ -45,6 +50,17 @@ export default async function SettingsPage() {
           nonvoteEnabled={settings?.nonvote_penalty_enabled ?? false}
           nonvotePoints={settings?.nonvote_penalty_points ?? 2}
         />
+      </Panel>
+
+      <Panel>
+        <SectionTitle>Notifications de vote</SectionTitle>
+        <p className="mb-3 text-sm text-muted">
+          {subscribed === 0
+            ? "Aucun joueur n'a encore activé les notifications. Chacun les active depuis son Profil, sur son téléphone."
+            : `${subscribed} membre${subscribed > 1 ? "s ont" : " a"} activé les notifications sur au moins un appareil.`}{" "}
+          Les rappels partent automatiquement depuis {siteUrl.replace(/^https?:\/\//, "")}.
+        </p>
+        <NotificationSettingsForm notifyOnOpen={settings?.notify_on_open ?? true} reminderHours={settings?.reminder_hours ?? 3} />
       </Panel>
 
       <Panel>

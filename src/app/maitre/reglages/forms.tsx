@@ -2,7 +2,7 @@
 
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { Field, inputClass } from "@/components/ui";
-import { saveSeasonAction, saveSettingsAction } from "../actions";
+import { saveNotificationSettingsAction, saveSeasonAction, saveSettingsAction } from "../actions";
 
 export function SettingsForm({
   lateEnabled,
@@ -68,6 +68,21 @@ export function SeasonForm({
         Saison en cours (affichée aux joueurs)
       </label>
       <SubmitButton variant={season ? "secondary" : "primary"}>{season ? "Enregistrer" : "Créer la saison"}</SubmitButton>
+    </ActionForm>
+  );
+}
+
+export function NotificationSettingsForm({ notifyOnOpen, reminderHours }: { notifyOnOpen: boolean; reminderHours: number }) {
+  return (
+    <ActionForm action={saveNotificationSettingsAction} className="space-y-4">
+      <label className="flex min-h-12 items-center gap-3">
+        <input type="checkbox" name="notify_on_open" defaultChecked={notifyOnOpen} className="h-5 w-5 accent-pitch" />
+        Prévenir les joueurs de la feuille de match à l&apos;ouverture du vote
+      </label>
+      <Field label="Rappel avant l'heure limite (heures)" hint="Envoyé seulement à ceux qui n'ont pas encore voté. 0 = pas de rappel.">
+        <input type="number" name="reminder_hours" min={0} max={72} defaultValue={reminderHours} className={`${inputClass} max-w-32`} required />
+      </Field>
+      <SubmitButton>Enregistrer</SubmitButton>
     </ActionForm>
   );
 }

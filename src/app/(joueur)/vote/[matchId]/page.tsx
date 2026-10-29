@@ -20,13 +20,15 @@ export default async function VotePage({ params }: { params: Promise<{ matchId: 
   const [{ data: sheet }, ballots] = await Promise.all([
     supabase
       .from("match_players")
-      .select("player_id, players(id, display_name, shirt_number)")
+      .select("player_id, role, players(id, display_name, shirt_number)")
       .eq("match_id", match.id),
     getMyBallots(supabase, viewer.playerId),
   ]);
   const inSquad = (sheet ?? []).some((r) => r.player_id === viewer.playerId);
   const ballot = ballots.get(match.id);
+  // Les supporters votent mais ne peuvent pas être choisis
   const teammates: Teammate[] = (sheet ?? [])
+    .filter((r) => r.role !== "supporter")
     .map((r) => r.players as unknown as { id: string; display_name: string; shirt_number: number | null })
     .filter((p) => p && p.id !== viewer.playerId)
     .map((p) => ({ id: p.id, name: p.display_name, number: p.shirt_number }))

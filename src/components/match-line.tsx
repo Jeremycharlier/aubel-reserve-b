@@ -15,12 +15,25 @@ export function MatchDate({ iso }: { iso: string }) {
   );
 }
 
-export function MatchHeading({ match }: { match: Pick<MatchRow, "opponent" | "kickoff_at" | "location" | "effective_state"> }) {
+export function MatchHeading({
+  match,
+}: {
+  match: Pick<MatchRow, "opponent" | "kickoff_at" | "location" | "effective_state"> &
+    Partial<Pick<MatchRow, "score_for" | "score_against">>;
+}) {
+  const hasScore = match.score_for != null && match.score_against != null;
   return (
     <div className="flex min-w-0 items-start gap-3">
       <MatchDate iso={match.kickoff_at} />
       <div className="min-w-0">
-        <p className="truncate font-display text-xl font-semibold leading-tight">Aubel B – {match.opponent}</p>
+        <p className="font-display text-xl font-semibold leading-tight">
+          Aubel B – {match.opponent}
+          {hasScore ? (
+            <span className="num ml-2 whitespace-nowrap rounded-md bg-ink px-1.5 py-0.5 text-base text-chalk">
+              {match.score_for} – {match.score_against}
+            </span>
+          ) : null}
+        </p>
         <p className="text-sm text-muted">
           {fmtDateTime(match.kickoff_at)}
           {match.location ? `, ${match.location}` : ""}

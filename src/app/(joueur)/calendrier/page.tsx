@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireViewer } from "@/lib/auth";
 import { createUserClient } from "@/lib/supabase/server";
 import { getCurrentSeason, getMyBallots, getMySquadMatchIds, getSeasonMatches } from "@/lib/data";
@@ -32,7 +33,9 @@ export default async function CalendarPage() {
             return (
               <li key={m.id}>
                 <Panel>
-                  <MatchHeading match={m} />
+                  <Link href={`/match/${m.id}`} className="block rounded-lg" aria-label={`Détails du match contre ${m.opponent}`}>
+                    <MatchHeading match={m} />
+                  </Link>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                     {inSquad ? <Tag tone="ok">Sur la feuille de match</Tag> : <Tag tone="muted">Pas sur la feuille</Tag>}
                     {ballot ? (
@@ -46,6 +49,9 @@ export default async function CalendarPage() {
                       )
                     ) : null}
                     <span className="text-muted">Heure limite : {fmtDateTime(m.vote_deadline)}</span>
+                    <Link href={`/match/${m.id}`} className="ml-auto inline-flex min-h-10 items-center font-semibold text-pitch">
+                      Présents et faits du match
+                    </Link>
                   </div>
                   {m.effective_state === "ouvert" && inSquad ? (
                     <LinkButton href={`/vote/${m.id}`} variant={ballot ? "secondary" : "primary"} className="mt-3 w-full sm:w-auto">

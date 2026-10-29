@@ -92,9 +92,11 @@ export default async function HomePage() {
         ) : (
           <div className="space-y-3">
             {upcoming.map((m) => (
-              <Panel key={m.id}>
-                <MatchHeading match={m} />
-              </Panel>
+              <Link key={m.id} href={`/match/${m.id}`} className="block rounded-xl">
+                <Panel>
+                  <MatchHeading match={m} />
+                </Panel>
+              </Link>
             ))}
           </div>
         )}

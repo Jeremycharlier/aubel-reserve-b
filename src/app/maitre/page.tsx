@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireMaitre } from "@/lib/auth";
-import { createUserClient } from "@/lib/supabase/server";
+import { createServiceClient, createUserClient } from "@/lib/supabase/server";
+import { rememberSiteUrl } from "@/lib/origin";
 import { getCurrentSeason, getPlayersMap, getSeasonMatches } from "@/lib/data";
 import { fmtDateTime, timeUntil } from "@/lib/time";
 import { EmptyState, LinkButton, PageTitle, Panel, SectionTitle, StateBadge, Tag } from "@/components/ui";
@@ -10,6 +11,8 @@ export const metadata = { title: "Tableau de bord" };
 export default async function DashboardPage() {
   await requireMaitre();
   const supabase = await createUserClient();
+  // Mémorise l'adresse du site pour les rappels automatiques
+  await rememberSiteUrl(createServiceClient()).catch(() => null);
   const season = await getCurrentSeason(supabase);
   if (!season) {
     return (

@@ -39,7 +39,14 @@ export default async function MatchesPage({ searchParams }: { searchParams: Prom
       <PageTitle
         title="Calendrier"
         subtitle={<SeasonPicker seasons={seasons} current={season.id} basePath="/maitre/matchs" />}
-        action={<LinkButton href={`/maitre/matchs/nouveau?saison=${season.id}`}>Ajouter un match</LinkButton>}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <LinkButton href={`/maitre/matchs/import?saison=${season.id}`} variant="secondary">
+              Importer (Excel / CSV)
+            </LinkButton>
+            <LinkButton href={`/maitre/matchs/nouveau?saison=${season.id}`}>Ajouter un match</LinkButton>
+          </div>
+        }
       />
       {matches.length === 0 ? (
         <EmptyState title="Aucun match dans cette saison">Ajoutez le premier match pour commencer.</EmptyState>

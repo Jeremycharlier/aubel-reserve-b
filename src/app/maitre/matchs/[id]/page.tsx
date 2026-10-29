@@ -6,7 +6,9 @@ import { getMatch, getSeasons } from "@/lib/data";
 import { fmtDateTime, fmtLong, toBrusselsInput } from "@/lib/time";
 import { PageTitle, Panel, SectionTitle, StateBadge, Tag } from "@/components/ui";
 import { MatchForm } from "../match-form";
-import { DangerZone, SheetForm, VoteStateControls } from "./controls";
+import { DangerZone, SheetForm, StatsForm, VoteStateControls } from "./controls";
+
+type Role = "joueur" | "delegue" | "supporter";
 
 export const metadata = { title: "Match" };
 
@@ -19,13 +21,18 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
   const match = await getMatch(supabase, id);
   if (!match) notFound();
 
-  const [seasons, { data: players }, { data: sheet }, { data: ballots }] = await Promise.all([
-    getSeasons(supabase),
-    supabase.from("players").select("id, display_name, shirt_number, active").order("display_name"),
-    supabase.from("match_players").select("player_id").eq("match_id", id),
-    supabase.from("ballots").select("voter_player_id, status, ballot_selections(selected_player_id)").eq("match_id", id),
-  ]);
-  const selected = (sheet ?? []).map((s) => s.player_id as string);
+  const [seasons, { data: players }, { data: sheet }, { data: ballots }, { data: statsData }, { count: penaltyCount }] =
+    await Promise.all([
+      getSeasons(supabase),
+      supabase.from("players").select("id, display_name, shirt_number, active, default_role").order("display_name"),
+      supabase.from("match_players").select("player_id, role").eq("match_id", id),
+      supabase.from("ballots").select("voter_player_id, status, ballot_selections(selected_player_id)").eq("match_id", id),
+      supabase.from("match_stats").select("player_id, goals, assists, yellow_cards, red_cards").eq("match_id", id),
+      supabase.from("penalties").select("player_id", { count: "exact", head: true }).eq("match_id", id),
+    ]);
+  const sheetRoles = Object.fromEntries((sheet ?? []).map((s) => [s.player_id as string, s.role as Role]));
+  const selected = Object.keys(sheetRoles);
+  const statsBy = new Map((statsData ?? []).map((s) => [s.player_id as string, s]));
   const locked = new Set<string>();
   for (const b of ballots ?? []) {
     locked.add(b.voter_player_id);
@@ -33,7 +40,18 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
   }
   const roster = (players ?? [])
     .filter((p) => p.active || selected.includes(p.id))
-    .map((p) => ({ id: p.id, name: p.display_name, number: p.shirt_number, active: p.active }));
+    .map((p) => ({ id: p.id, name: p.display_name, number: p.shirt_number, active: p.active, defaultRole: p.default_role as Role }));
+  const statRows = roster
+    .filter((p) => p.id in sheetRoles)
+    .sort((a, b) => (a.number ?? 99) - (b.number ?? 99) || a.name.localeCompare(b.name, "fr"))
+    .map((p) => {
+      const st = statsBy.get(p.id);
+      return {
+        id: p.id, name: p.name, number: p.number,
+        goals: st?.goals ?? 0, assists: st?.assists ?? 0, yellow: st?.yellow_cards ?? 0, red: st?.red_cards ?? 0,
+      };
+    });
+  const hasData = (ballots ?? []).length > 0 || (statsData ?? []).length > 0 || (penaltyCount ?? 0) > 0;
   const hasSchedule = !!(match.vote_opens_at || match.vote_closes_at);
 
   return (
@@ -91,8 +109,15 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
             Aucun joueur dans l&apos;effectif. <Link href="/maitre/equipe" className="font-semibold text-pitch">Ajoutez des joueurs</Link>.
           </p>
         ) : (
-          <SheetForm matchId={match.id} players={roster} selected={selected} locked={[...locked]} />
+          <SheetForm matchId={match.id} players={roster} selected={sheetRoles} locked={[...locked]} />
         )}
+      </Panel>
+
+      <Panel>
+        <div id="statistiques" />
+        <SectionTitle>Score, buteurs, passes et cartons</SectionTitle>
+        <p className="mb-3 text-sm text-muted">Visible par tous les joueurs sur la page du match et la liste des joueurs.</p>
+        <StatsForm matchId={match.id} rows={statRows} scoreFor={match.score_for} scoreAgainst={match.score_against} />
       </Panel>
 
       <Panel>
@@ -115,7 +140,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
 
       <Panel>
         <SectionTitle>Archivage et suppression</SectionTitle>
-        <DangerZone matchId={match.id} archived={match.archived} hasVotes={(ballots ?? []).length > 0} />
+        <DangerZone matchId={match.id} archived={match.archived} hasVotes={hasData} />
       </Panel>
     </div>
   );

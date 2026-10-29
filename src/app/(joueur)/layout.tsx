@@ -7,10 +7,11 @@ export default async function PlayerLayout({ children }: { children: React.React
   const items: NavItem[] = [
     { href: "/", label: "Accueil", icon: "home", exact: true },
     { href: "/calendrier", label: "Calendrier", icon: "calendar" },
+    { href: "/joueurs", label: "Joueurs", icon: "team" },
     { href: "/historique", label: "Historique", icon: "history" },
     { href: "/profil", label: "Profil", icon: "profile" },
   ];
-  if (viewer.role === "maitre") items.push({ href: "/maitre", label: "Maître", icon: "admin" });
+  const isMaitre = viewer.role === "maitre";
 
   return (
     <div className="pb-nav lg:pb-10">
@@ -21,12 +22,23 @@ export default async function PlayerLayout({ children }: { children: React.React
           </Link>
           <nav aria-label="Navigation" className="hidden items-center gap-5 text-sm font-semibold lg:flex">
             {items.map((item) => (
-              <Link key={item.href} href={item.href} className={item.icon === "admin" ? "text-gold" : "text-chalk/85 hover:text-chalk"}>
-                {item.icon === "admin" ? "Espace maître" : item.label}
+              <Link key={item.href} href={item.href} className="text-chalk/85 hover:text-chalk">
+                {item.label}
               </Link>
             ))}
+            {isMaitre ? (
+              <Link href="/maitre" className="text-gold">
+                Espace maître
+              </Link>
+            ) : null}
           </nav>
-          <span className="text-sm text-chalk/80 lg:hidden">{viewer.displayName}</span>
+          {isMaitre ? (
+            <Link href="/maitre" className="text-sm font-semibold text-gold lg:hidden">
+              Espace maître
+            </Link>
+          ) : (
+            <span className="text-sm text-chalk/80 lg:hidden">{viewer.displayName}</span>
+          )}
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 pt-5">{children}</main>

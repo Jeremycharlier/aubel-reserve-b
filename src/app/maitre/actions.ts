@@ -13,12 +13,20 @@ import { loginEmailDomain } from "@/lib/env";
 import { translateError } from "@/lib/errors";
 import { createServiceClient, createUserClient } from "@/lib/supabase/server";
 import { parseLocalInput } from "@/lib/time";
+import { rememberSiteUrl } from "@/lib/origin";
+import { sendPendingNotifications } from "@/lib/push";
 
 const uuid = z.uuid();
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const optUuid = (fd: FormData, k: string) => {
   const v = str(fd, k);
   return v && uuid.safeParse(v).success ? v : null;
+};
+const ROLES = ["joueur", "delegue", "supporter"] as const;
+const roleOf = (v: string) => (ROLES as readonly string[]).includes(v) ? (v as (typeof ROLES)[number]) : "joueur";
+const dateOrNull = (fd: FormData, k: string) => {
+  const v = str(fd, k);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 };
 const intOrNull = (fd: FormData, k: string) => {
   const v = str(fd, k);
@@ -85,6 +93,15 @@ export async function setVoteStateAction(_p: ActionResult, fd: FormData): Promis
   });
   if (error) return failure(translateError(error));
   done([`/maitre/matchs/${id}`, "/maitre/matchs", "/maitre"]);
+  if (data === "ouvert") {
+    // Notifications d'ouverture immédiates (sans attendre le planificateur)
+    try {
+      const admin = createServiceClient();
+      await sendPendingNotifications(admin, await rememberSiteUrl(admin));
+    } catch {
+      // L'envoi sera retenté par le planificateur.
+    }
+  }
   const label = { ouvert: "ouvert", ferme: "fermé", a_venir: "à venir" }[data as string] ?? String(data);
   return success(state === "auto" ? `Mode automatique rétabli : vote ${label}.` : `Vote ${label}.`);
 }
@@ -106,7 +123,10 @@ export async function deleteMatchAction(_p: ActionResult, fd: FormData): Promise
   const id = optUuid(fd, "match_id");
   if (!id) return failure("Requête invalide.");
   const supabase = await createUserClient();
-  const { error } = await supabase.rpc("admin_delete_match", { p_match_id: id });
+  const { error } = await supabase.rpc("admin_delete_match", {
+    p_match_id: id,
+    p_confirm: str(fd, "confirm").toUpperCase() || null,
+  });
   if (error) return failure(translateError(error));
   done(["/maitre/matchs"]);
   redirect("/maitre/matchs");
@@ -117,11 +137,68 @@ export async function saveSheetAction(_p: ActionResult, fd: FormData): Promise<A
   const id = optUuid(fd, "match_id");
   const ids = fd.getAll("player").map(String).filter((v) => uuid.safeParse(v).success);
   if (!id) return failure("Requête invalide.");
+  const roles = ids.map((pid) => roleOf(str(fd, `role_${pid}`)));
   const supabase = await createUserClient();
-  const { data, error } = await supabase.rpc("admin_set_match_players", { p_match_id: id, p_player_ids: ids });
+  const { data, error } = await supabase.rpc("admin_set_match_sheet", { p_match_id: id, p_player_ids: ids, p_roles: roles });
   if (error) return failure(translateError(error));
-  done([`/maitre/matchs/${id}`]);
-  return success(`Feuille de match enregistrée : ${data} joueur${Number(data) > 1 ? "s" : ""}.`);
+  done([`/maitre/matchs/${id}`, `/match/${id}`]);
+  return success(`Feuille de match enregistrée : ${data} présent${Number(data) > 1 ? "s" : ""}.`);
+}
+
+const statInt = (fd: FormData, k: string, max: number) => {
+  const n = Number(str(fd, k) || "0");
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : NaN;
+};
+
+export async function saveStatsAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireMaitre();
+  const id = optUuid(fd, "match_id");
+  if (!id) return failure("Requête invalide.");
+  const sf = str(fd, "score_for");
+  const sa = str(fd, "score_against");
+  const scoreFor = sf === "" ? null : Number(sf);
+  const scoreAgainst = sa === "" ? null : Number(sa);
+  if ([scoreFor, scoreAgainst].some((v) => v !== null && !(Number.isInteger(v) && v >= 0 && v <= 99))) {
+    return failure("Score invalide.");
+  }
+  const rows = fd
+    .getAll("player")
+    .map(String)
+    .filter((v) => uuid.safeParse(v).success)
+    .map((pid) => ({
+      player_id: pid,
+      goals: statInt(fd, `goals_${pid}`, 20),
+      assists: statInt(fd, `assists_${pid}`, 20),
+      yellow: statInt(fd, `yellow_${pid}`, 2),
+      red: statInt(fd, `red_${pid}`, 1),
+    }));
+  if (rows.some((r) => [r.goals, r.assists, r.yellow, r.red].some(Number.isNaN))) {
+    return failure("Valeurs invalides : 2 cartons jaunes et 1 rouge maximum par joueur.");
+  }
+  const supabase = await createUserClient();
+  const { error } = await supabase.rpc("admin_save_match_stats", {
+    p_match_id: id,
+    p_score_for: scoreFor,
+    p_score_against: scoreAgainst,
+    p_rows: rows,
+  });
+  if (error) return failure(translateError(error));
+  done([`/maitre/matchs/${id}`, `/match/${id}`, "/joueurs"]);
+  return success("Score et statistiques enregistrés. Ils sont visibles par tous les joueurs.");
+}
+
+export async function saveNotificationSettingsAction(_p: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireMaitre();
+  const hours = intOrNull(fd, "reminder_hours");
+  const supabase = await createUserClient();
+  const { error } = await supabase.rpc("admin_save_notification_settings", {
+    p_notify_on_open: fd.get("notify_on_open") === "on",
+    p_reminder_hours: hours ?? 0,
+  });
+  if (error) return failure(translateError(error));
+  await rememberSiteUrl(createServiceClient());
+  done(["/maitre/reglages"]);
+  return success("Réglages des notifications enregistrés.");
 }
 
 // ---------------------------------------------------------------- Règles et saisons
@@ -163,13 +240,18 @@ export async function savePlayerAction(_p: ActionResult, fd: FormData): Promise<
   await requireMaitre();
   const shirt = intOrNull(fd, "shirt_number");
   if (Number.isNaN(shirt) || (shirt !== null && (shirt < 1 || shirt > 99))) return failure("Numéro de maillot entre 1 et 99.");
-  const name = str(fd, "display_name");
+  const name = str(fd, "full_name");
   if (!name) return failure("Indiquez le nom du joueur.");
+  const nickname = str(fd, "nickname");
   const supabase = await createUserClient();
-  const { error } = await supabase.rpc("admin_save_player", {
+  const { error } = await supabase.rpc("admin_save_player_full", {
     p_id: optUuid(fd, "id"),
-    p_display_name: name,
+    p_full_name: name,
+    p_nickname: nickname || null,
+    p_use_nickname: fd.get("use_nickname") === "on" && nickname !== "",
+    p_birth_date: dateOrNull(fd, "birth_date"),
     p_shirt_number: shirt,
+    p_default_role: roleOf(str(fd, "default_role")),
     p_active: fd.has("active_field") ? fd.get("active") === "on" : true,
   });
   if (error) return failure(translateError(error));
@@ -192,6 +274,23 @@ export async function createAccountAction(_p: ActionResult<Credentials>, fd: For
       newPlayerName: playerId ? null : newName,
       shirtNumber: shirt,
     });
+    // Compléments de fiche (surnom, naissance, statut) si renseignés
+    const nickname = str(fd, "nickname");
+    const role = roleOf(str(fd, "default_role"));
+    const birth = dateOrNull(fd, "birth_date");
+    if (!playerId && (nickname || birth || role !== "joueur")) {
+      const supabase = await createUserClient();
+      await supabase.rpc("admin_save_player_full", {
+        p_id: acc.playerId,
+        p_full_name: newName,
+        p_nickname: nickname || null,
+        p_use_nickname: fd.get("use_nickname") === "on" && nickname !== "",
+        p_birth_date: birth,
+        p_shirt_number: shirt,
+        p_default_role: role,
+        p_active: true,
+      });
+    }
     done(["/maitre/equipe"]);
     return success("Compte créé. Transmettez ces accès au joueur en main propre.", {
       username: acc.username,

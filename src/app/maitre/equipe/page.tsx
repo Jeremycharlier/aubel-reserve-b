@@ -1,18 +1,20 @@
 import { requireMaitre } from "@/lib/auth";
 import { createUserClient } from "@/lib/supabase/server";
 import { PageTitle, Panel, SectionTitle, Tag } from "@/components/ui";
+import { RoleTag } from "@/components/stats";
+import { PLAYER_COLUMNS, ageOn, type PlayerRow } from "@/lib/data";
 import { AccountActions, EditPlayerForm, NewPlayerForm, PlayerOnlyForm } from "./forms";
 
 export const metadata = { title: "Équipe et comptes" };
 
-type Player = { id: string; display_name: string; shirt_number: number | null; active: boolean };
+type Player = PlayerRow;
 type Profile = { user_id: string; username: string; role: string; player_id: string | null; active: boolean; must_change_password: boolean; created_at: string };
 
 export default async function TeamPage() {
   const viewer = await requireMaitre();
   const supabase = await createUserClient();
   const [{ data: players }, { data: profiles }] = await Promise.all([
-    supabase.from("players").select("id, display_name, shirt_number, active").order("display_name"),
+    supabase.from("players").select(PLAYER_COLUMNS).order("display_name"),
     supabase.from("profiles").select("user_id, username, role, player_id, active, must_change_password, created_at"),
   ]);
   const byPlayer = new Map(((profiles ?? []) as Profile[]).filter((p) => p.player_id).map((p) => [p.player_id!, p]));
@@ -31,10 +33,18 @@ export default async function TeamPage() {
               {p.shirt_number ?? "–"}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold">{p.display_name}</span>
-              <span className="block text-sm text-muted">{acc ? `Identifiant : ${acc.username}` : "Sans compte"}</span>
+              <span className="block truncate font-semibold">
+                {p.display_name}
+                {p.use_nickname ? <span className="font-normal text-muted"> ({p.full_name})</span> : null}
+              </span>
+              <span className="block text-sm text-muted">
+                {[acc ? `Identifiant : ${acc.username}` : "Sans compte", ageOn(p.birth_date) !== null ? `${ageOn(p.birth_date)} ans` : null]
+                  .filter(Boolean)
+                  .join(", ")}
+              </span>
             </span>
             <span className="flex flex-wrap justify-end gap-1.5">
+              <RoleTag role={p.default_role} />
               {acc?.role === "maitre" ? <Tag tone="ok">Maître</Tag> : null}
               {acc && acc.active && acc.must_change_password ? <Tag tone="warn">Mot de passe temporaire</Tag> : null}
               {acc && !acc.active ? <Tag tone="late">Compte désactivé</Tag> : null}
@@ -42,7 +52,7 @@ export default async function TeamPage() {
             </span>
           </summary>
           <div className="space-y-4 border-t border-line px-4 py-4">
-            <EditPlayerForm id={p.id} name={p.display_name} number={p.shirt_number} active={p.active} hasAccount={!!acc} />
+            <EditPlayerForm player={p} hasAccount={!!acc} />
             {acc ? (
               <AccountActions
                 userId={acc.user_id}
@@ -65,7 +75,13 @@ export default async function TeamPage() {
 
   return (
     <div className="space-y-5">
-      <PageTitle title="Équipe et comptes" subtitle={`${active.length} joueur${active.length > 1 ? "s" : ""} actif${active.length > 1 ? "s" : ""}`} />
+      <PageTitle
+        action={
+          <a href="/api/joueurs/csv" className="font-semibold text-pitch" download>
+            Exporter la liste (CSV)
+          </a>
+        }
+        title="Équipe et comptes" subtitle={`${active.length} joueur${active.length > 1 ? "s" : ""} actif${active.length > 1 ? "s" : ""}`} />
 
       <Panel>
         <SectionTitle>Créer un compte joueur</SectionTitle>

@@ -15,8 +15,29 @@ export type MatchRow = {
   archived: boolean;
   manual_state: VoteState | null;
   manual_at: string | null;
+  score_for: number | null;
+  score_against: number | null;
   effective_state: VoteState;
 };
+
+export type PlayerRole = "joueur" | "delegue" | "supporter";
+
+export type PlayerRow = {
+  id: string;
+  display_name: string;
+  full_name: string;
+  nickname: string | null;
+  use_nickname: boolean;
+  birth_date: string | null;
+  shirt_number: number | null;
+  default_role: PlayerRole;
+  active: boolean;
+};
+
+export const PLAYER_COLUMNS =
+  "id, display_name, full_name, nickname, use_nickname, birth_date, shirt_number, default_role, active";
+
+export type StatLine = { goals: number; assists: number; yellow_cards: number; red_cards: number };
 
 export type Season = { id: string; name: string; starts_on: string | null; ends_on: string | null; is_current: boolean };
 
@@ -57,10 +78,40 @@ export async function getMatch(supabase: SupabaseClient, id: string): Promise<Ma
   return (data as MatchRow) ?? null;
 }
 
-export async function getPlayersMap(supabase: SupabaseClient): Promise<Map<string, { display_name: string; shirt_number: number | null; active: boolean }>> {
-  const { data } = await supabase.from("players").select("id, display_name, shirt_number, active");
-  return new Map((data ?? []).map((p) => [p.id as string, p]));
+export async function getPlayersMap(supabase: SupabaseClient): Promise<Map<string, PlayerRow>> {
+  const { data } = await supabase.from("players").select(PLAYER_COLUMNS);
+  return new Map(((data ?? []) as PlayerRow[]).map((p) => [p.id, p]));
 }
+
+/** Totaux de statistiques par joueur pour une liste de matchs. */
+export async function getStatsTotals(supabase: SupabaseClient, matchIds: string[]): Promise<Map<string, StatLine & { matches: number }>> {
+  const totals = new Map<string, StatLine & { matches: number }>();
+  if (matchIds.length === 0) return totals;
+  const { data } = await supabase
+    .from("match_stats")
+    .select("player_id, goals, assists, yellow_cards, red_cards")
+    .in("match_id", matchIds);
+  for (const r of (data ?? []) as (StatLine & { player_id: string })[]) {
+    const t = totals.get(r.player_id) ?? { goals: 0, assists: 0, yellow_cards: 0, red_cards: 0, matches: 0 };
+    t.goals += r.goals;
+    t.assists += r.assists;
+    t.yellow_cards += r.yellow_cards;
+    t.red_cards += r.red_cards;
+    totals.set(r.player_id, t);
+  }
+  return totals;
+}
+
+/** Âge en années révolues à une date donnée. */
+export function ageOn(birthDate: string | null, now = new Date()): number | null {
+  if (!birthDate) return null;
+  const [y, m, d] = birthDate.split("-").map(Number);
+  let age = now.getFullYear() - y;
+  if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) age -= 1;
+  return age;
+}
+
+export const ROLE_LABEL: Record<PlayerRole, string> = { joueur: "Joueur", delegue: "Délégué", supporter: "Supporter" };
 
 /** Matchs où le joueur figure sur la feuille. */
 export async function getMySquadMatchIds(supabase: SupabaseClient, playerId: string): Promise<Set<string>> {
