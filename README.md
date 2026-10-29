@@ -9,6 +9,10 @@ réservé au maître, exportable en PDF.
 - Maître : calendrier, feuilles de match, ouverture/fermeture des votes (manuelle,
   programmée ou mixte), malus, classement, bulletins détaillés, corrections
   journalisées, gestion des comptes, export PDF.
+- Équipe : surnoms, dates de naissance, statuts joueur / délégué / supporter,
+  page de chaque match (présents, score, buteurs, passes, cartons) et page
+  « Joueurs » avec les statistiques de la saison.
+- Calendrier importable depuis Excel ou CSV, rappels de vote par notification.
 
 Sommaire : [Architecture](#1-architecture-et-décisions) ·
 [Structure](#2-structure-du-projet) · [Lancement local](#3-lancement-local) ·
@@ -154,9 +158,10 @@ Comptes de démonstration : maître `coach`, joueurs `thomas.kessels`,
 
 ```bash
 npm run typecheck && npm run lint
-npm run test:unit      # 19 tests : sélection 3/2/1, fuseau horaire et DST, mots de passe, PDF
-npm run test:db        # 50 tests contre une vraie pile Supabase locale (option B ci-dessus)
+npm run test:unit      # 28 tests : sélection 3/2/1, fuseau horaire, mots de passe, PDF, import Excel/CSV
+npm run test:db        # 69 tests contre une vraie pile Supabase locale (option B ci-dessus)
 npm run test:e2e       # parcours navigateur (application lancée + seed:demo, CHROME_PATH requis)
+node tests/e2e/ameliorations.mjs   # surnom, statuts, stats, import, suppression (idem)
 ```
 
 `test:db` recrée une base vierge, applique les migrations, puis vérifie
@@ -182,10 +187,13 @@ notamment :
   match hors classement, bulletin annulé non compté, correction journalisée,
   journal immuable.
 
-Résultat lors de la livraison : **69 tests automatisés réussis** (19 unitaires,
-50 base de données) et le parcours navigateur complet réussi (création de compte,
-première connexion, vote 3/2/1, PDF, refus d'accès joueur, déconnexion, absence
-de défilement horizontal à 390 px).
+Résultat au 29/10/2026 : **97 tests automatisés réussis** (28 unitaires,
+69 base de données, dont l'envoi réel de notifications chiffrées vers un faux
+service de push) et les deux parcours navigateur réussis (création de compte,
+première connexion, vote 3/2/1, PDF, refus d'accès joueur, déconnexion, surnom,
+feuille avec supporter, statistiques, import CSV, suppression confirmée, export
+CSV ; aucun défilement horizontal à 390 px). La mise à jour SQL a aussi été
+testée sur une base contenant déjà des joueurs, matchs et bulletins.
 
 ---
 
@@ -342,3 +350,68 @@ une page l'indique.
 
 **Limites connues** : pas de récupération de mot de passe par e-mail (choix de
 conception, cf. décision 11) ; pas de notifications push de rappel de vote.
+
+---
+
+## 11. Améliorations du 29 octobre 2026
+
+### Ce qui change
+
+| Fonction | Où | Règle |
+| --- | --- | --- |
+| Surnom | Profil (joueur) ou Équipe (maître) | Le joueur ou le maître coche « afficher le surnom » : il remplace le nom partout (vote, classement, PDF). Deux joueurs ne peuvent pas avoir le même nom affiché. |
+| Date de naissance | Profil ou Équipe | Visible par tous les membres (âge sur la page Joueurs) ; export CSV de l'équipe pour le maître. |
+| Joueur / délégué / supporter | Statut par défaut sur la fiche, modifiable sur chaque feuille de match | Joueur et délégué : votent et peuvent recevoir des voix. Supporter : vote, mais ne peut pas être choisi (contrôlé par la base). Un joueur ayant déjà reçu des voix ne peut pas devenir supporter pour ce match. Les supporters n'apparaissent pas au classement. |
+| Supprimer un match avec votes | Fiche du match, zone « Archivage et suppression » | Taper `SUPPRIMER`. Bulletins, malus, statistiques et feuille sont effacés et retirés du classement ; une copie complète est conservée dans le journal. |
+| Import du calendrier | Calendrier → « Importer (Excel / CSV) » | Modèle téléchargeable (.xlsx ou .csv). Aperçu avec erreurs ligne par ligne, puis import « tout ou rien ». Les doublons (même adversaire, date et heure) sont ignorés. |
+| Notifications | Profil → Notifications (chaque joueur, sur chaque téléphone) | À l'ouverture du vote et X heures avant l'heure limite (réglable, 3 h par défaut), uniquement pour les joueurs de la feuille qui n'ont pas voté. Une seule fois par type. |
+| Score, buts, passes, cartons | Fiche du match (maître) | Visibles par tous : page du match et page Joueurs. 2 jaunes et 1 rouge maximum par joueur et par match. |
+| Présents | Page du match (tous les joueurs) | Liste de la feuille de match avec les statuts. Qui a voté pour qui reste confidentiel. |
+
+### Format du fichier de calendrier
+
+Première ligne = en-têtes (accents et majuscules indifférents). Une ligne par match.
+
+| Colonne | Obligatoire | Format | Exemple |
+| --- | --- | --- | --- |
+| date | oui | JJ/MM/AAAA | 08/11/2026 |
+| heure | oui | HH:MM (heure belge) | 15:00 |
+| adversaire | oui | texte | FC Herve C |
+| lieu | non | texte | Aubel |
+| classement | non | oui / non (oui par défaut) | non |
+| ouverture_vote | non | JJ/MM/AAAA HH:MM | 08/11/2026 17:00 |
+| heure_limite | non | JJ/MM/AAAA HH:MM | 10/11/2026 20:00 |
+| fermeture_vote | non | JJ/MM/AAAA HH:MM | 11/11/2026 20:00 |
+
+Colonnes de vote vides : règles choisies à l'import (par défaut ouverture 2 h
+après le coup d'envoi, heure limite 48 h après, fermeture 72 h après ; chaque
+règle peut être « manuelle »).
+
+### Comment fonctionnent les notifications
+
+- Norme Web Push, sans service payant. Les clés de chiffrement (VAPID) sont
+  générées automatiquement et stockées dans la base : aucune variable à ajouter.
+- Android (Chrome) : fonctionne directement. iPhone : uniquement si
+  l'application est **installée sur l'écran d'accueil** (iOS 16.4 ou plus).
+- Toutes les 10 minutes, la base (pg_cron) vérifie s'il y a des rappels à
+  envoyer et, seulement dans ce cas, appelle le site via pg_net. L'adresse du
+  site est mémorisée automatiquement quand le maître ouvre son tableau de bord.
+- À l'ouverture manuelle d'un vote, la notification part immédiatement.
+
+### Mettre à jour une installation existante
+
+1. **Supabase → SQL Editor** : coller `supabase/mise-a-jour-2026-10-29.sql`,
+   cliquer **Run** (une seule fois). Attendu : « Success. No rows returned ».
+2. **Supabase → Database → Extensions** : vérifier que **pg_net** est activé
+   (la mise à jour l'active si possible). **Integrations → Cron** : une
+   nouvelle tâche `aubel-push` doit apparaître.
+3. **GitHub** : déposer les fichiers mis à jour (Add file → Upload files) :
+   d'abord le dossier `src`, puis `public`, `supabase`, `scripts`, `tests` et
+   les fichiers `package.json`, `package-lock.json`, `next.config.ts`,
+   `vitest.config.mts`, `README.md`. Les fichiers existants sont remplacés.
+4. **Vercel** redéploie automatiquement. Ouvrir une fois l'espace maître
+   (tableau de bord) pour mémoriser l'adresse du site.
+5. Demander aux joueurs d'activer les notifications dans leur Profil.
+
+Ordre important : la base (étape 1) **avant** le code (étape 3), sinon le
+nouveau site cherchera des colonnes qui n'existent pas encore.

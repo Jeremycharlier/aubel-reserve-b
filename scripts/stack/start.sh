@@ -70,7 +70,8 @@ for _ in $(seq 1 60); do
 done
 
 echo "› Application des migrations"
-for f in "$ROOT"/supabase/migrations/*.sql; do
+# MIGRATION_LIMIT=n : n'applique que les n premières (test de mise à jour)
+for f in $(ls "$ROOT"/supabase/migrations/*.sql | head -n "${MIGRATION_LIMIT:-999}"); do
   "${PSQL[@]}" -f "$f" >/dev/null 2>"$STACK_RUN/migrate.err" || { cat "$STACK_RUN/migrate.err"; exit 1; }
 done
 if [ "${WITH_SEED:-0}" = "1" ]; then "${PSQL[@]}" -f "$ROOT/supabase/seed.sql" >/dev/null; fi

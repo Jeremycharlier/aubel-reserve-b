@@ -193,6 +193,6 @@ describe("Ouverture/fermeture automatiques et manuelles", () => {
     expect((await maitre.rpc("admin_delete_match", { p_match_id: empty })).error).toBeNull();
     const used = await createOpenMatch(maitre, ids);
     await vote(p[0].client, used, [ids[1], ids[2], ids[3]]);
-    expect((await maitre.rpc("admin_delete_match", { p_match_id: used })).error?.message).toBe("MATCH_HAS_VOTES");
+    expect((await maitre.rpc("admin_delete_match", { p_match_id: used })).error?.message).toBe("CONFIRM_REQUIRED");
   });
 });

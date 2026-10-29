@@ -12,6 +12,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Import de calendrier : fichiers jusqu'à 2 Mo
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
+  // exceljs et web-push restent des dépendances Node (non regroupées)
+  serverExternalPackages: ["exceljs", "web-push"],
   turbopack: {
     rules: {
       "*.css": {
