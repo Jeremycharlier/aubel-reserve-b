@@ -45,7 +45,7 @@ export default async function VotePage({ params }: { params: Promise<{ matchId: 
       <div>
         {back}
         <EmptyState title="Vous n'êtes pas sur la feuille de match">
-          Seuls les joueurs présents pour ce match peuvent voter. Si c&apos;est une erreur, prévenez le maître.
+          Seuls les joueurs présents pour ce match peuvent voter. Si c&apos;est une erreur, prévenez l’administrateur.
         </EmptyState>
       </div>
     );
@@ -64,7 +64,7 @@ export default async function VotePage({ params }: { params: Promise<{ matchId: 
             ? `Ouverture prévue : ${fmtDateTime(match.vote_opens_at)}.`
             : match.effective_state === "ferme"
               ? "Les bulletins ne peuvent plus être modifiés."
-              : "Le maître l'ouvrira après le match."}
+              : "L’administrateur l'ouvrira après le match."}
         </EmptyState>
         {ballot ? (
           <Panel>

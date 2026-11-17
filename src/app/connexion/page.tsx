@@ -40,7 +40,7 @@ export default async function LoginPage() {
           <LoginForm />
         </div>
         <p className="mt-6 text-sm text-chalk/70">
-          Pas encore d&apos;accès ? Vos identifiants vous sont remis par le maître de l&apos;équipe.
+          Pas encore d&apos;accès ? Vos identifiants vous sont remis par l’administrateur de l&apos;équipe.
         </p>
       </div>
     </main>

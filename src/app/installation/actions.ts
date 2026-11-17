@@ -8,7 +8,7 @@ import { failure, type ActionResult } from "@/lib/action-result";
 import { loginEmailDomain } from "@/lib/env";
 import { createServiceClient, createUserClient } from "@/lib/supabase/server";
 
-/** Vrai tant qu'aucun compte maître n'existe. */
+/** Vrai tant qu'aucun compte administrateur n'existe. */
 export async function installationOpen(): Promise<boolean> {
   const { count, error } = await createServiceClient()
     .from("profiles")
@@ -25,7 +25,7 @@ function tokenMatches(given: string): boolean {
 }
 
 /**
- * Création du premier compte maître depuis le navigateur. Exige le code
+ * Création du premier compte administrateur depuis le navigateur. Exige le code
  * SETUP_TOKEN (variable d'environnement), ne fonctionne qu'une seule fois,
  * et les essais de code erronés sont limités comme les connexions.
  */
@@ -61,5 +61,5 @@ export async function installAction(_p: ActionResult, fd: FormData): Promise<Act
     return failure(e instanceof AccountError ? e.message : "Création impossible.");
   }
   await loginWithUsername(admin, await createUserClient(), loginEmailDomain(), username, password, ip);
-  redirect("/maitre/reglages");
+  redirect("/gestion/reglages");
 }

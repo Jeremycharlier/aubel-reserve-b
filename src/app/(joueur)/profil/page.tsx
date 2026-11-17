@@ -33,7 +33,7 @@ export default async function ProfilePage() {
           <dt className="text-muted">Statut</dt>
           <dd className="font-semibold">
             {p ? ROLE_LABEL[p.default_role] : "Joueur"}
-            {viewer.role === "maitre" ? ", maître" : ""}
+            {viewer.role === "maitre" ? ", administrateur" : viewer.role === "entraineur" ? ", entraîneur" : ""}
           </dd>
           {p?.shirt_number ? (
             <>

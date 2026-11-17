@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { isAuthorizedCron } from "@/lib/cron-auth";
-import { sendPendingNotifications } from "@/lib/push";
+import { sendPendingNotifications, sendScheduledNotifications } from "@/lib/push";
 
 // Planificateur de secours (Vercel Cron, une fois par jour). Le planificateur
 // principal est pg_cron dans Supabase. Cet appel quotidien maintient aussi le
@@ -13,9 +13,12 @@ export async function GET(request: NextRequest) {
   }
   const { data, error } = await admin.rpc("process_vote_schedule");
   if (error) return NextResponse.json({ error: "Échec du traitement" }, { status: 500 });
-  let notifications = null;
+  let notifications: unknown = null;
   try {
-    notifications = await sendPendingNotifications(admin, request.nextUrl.origin);
+    notifications = {
+      auto: await sendPendingNotifications(admin, request.nextUrl.origin),
+      scheduled: await sendScheduledNotifications(admin, request.nextUrl.origin),
+    };
   } catch {
     notifications = { error: true };
   }

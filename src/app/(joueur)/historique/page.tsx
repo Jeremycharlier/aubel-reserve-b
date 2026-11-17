@@ -61,7 +61,7 @@ export default async function HistoryPage() {
                   {b ? (
                     <div className="mt-3">
                       <div className="mb-2 flex flex-wrap gap-2">
-                        {b.status === "annule" ? <Tag tone="warn">Bulletin annulé par le maître</Tag> : null}
+                        {b.status === "annule" ? <Tag tone="warn">Bulletin annulé par l’administrateur</Tag> : null}
                         {b.is_late ? <Tag tone="late">Voté en retard</Tag> : <Tag tone="ok">Voté à temps</Tag>}
                       </div>
                       <ol className="space-y-1.5">

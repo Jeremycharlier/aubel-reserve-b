@@ -37,7 +37,13 @@ export default async function CalendarPage() {
                     <MatchHeading match={m} />
                   </Link>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                    {inSquad ? <Tag tone="ok">Sur la feuille de match</Tag> : <Tag tone="muted">Pas sur la feuille</Tag>}
+                    {m.availability_state === "validee" ? (
+                      inSquad ? <Tag tone="ok">Convoqué</Tag> : <Tag tone="muted">Pas retenu</Tag>
+                    ) : m.availability_state === "ouverte" ? (
+                      <Tag tone="warn">Inscriptions ouvertes</Tag>
+                    ) : inSquad ? (
+                      <Tag tone="ok">Sur la feuille de match</Tag>
+                    ) : null}
                     {ballot ? (
                       ballot.status === "annule" ? (
                         <Tag tone="warn">Bulletin annulé</Tag>

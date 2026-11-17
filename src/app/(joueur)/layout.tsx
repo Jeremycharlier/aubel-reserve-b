@@ -11,7 +11,8 @@ export default async function PlayerLayout({ children }: { children: React.React
     { href: "/historique", label: "Historique", icon: "history" },
     { href: "/profil", label: "Profil", icon: "profile" },
   ];
-  const isMaitre = viewer.role === "maitre";
+  const isMaitre = viewer.role === "maitre" || viewer.role === "entraineur";
+  const staffLabel = viewer.role === "maitre" ? "Administration" : "Espace entraîneur";
 
   return (
     <div className="pb-nav lg:pb-10">
@@ -27,14 +28,14 @@ export default async function PlayerLayout({ children }: { children: React.React
               </Link>
             ))}
             {isMaitre ? (
-              <Link href="/maitre" className="text-gold">
-                Espace maître
+              <Link href="/gestion" className="text-gold">
+                {staffLabel}
               </Link>
             ) : null}
           </nav>
           {isMaitre ? (
-            <Link href="/maitre" className="text-sm font-semibold text-gold lg:hidden">
-              Espace maître
+            <Link href="/gestion" className="text-sm font-semibold text-gold lg:hidden">
+              {staffLabel}
             </Link>
           ) : (
             <span className="text-sm text-chalk/80 lg:hidden">{viewer.displayName}</span>

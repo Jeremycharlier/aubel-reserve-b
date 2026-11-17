@@ -5,11 +5,11 @@ import { buildStandingsPdf, type StandingRow } from "@/lib/pdf";
 import { fmtPrecise } from "@/lib/time";
 
 // Export PDF du classement : généré côté serveur après vérification du
-// rôle maître (ici puis dans la base). Ne contient aucun bulletin.
+// rôle administrateur (ici puis dans la base). Ne contient aucun bulletin.
 export async function GET(request: NextRequest) {
   const viewer = await getViewer();
   if (!viewer || viewer.role !== "maitre" || viewer.mustChangePassword) {
-    return NextResponse.json({ error: "Accès réservé au maître." }, { status: 403 });
+    return NextResponse.json({ error: "Accès réservé à l’administrateur." }, { status: 403 });
   }
   const seasonId = request.nextUrl.searchParams.get("saison") ?? "";
   if (!/^[0-9a-f-]{36}$/i.test(seasonId)) {

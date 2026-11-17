@@ -14,7 +14,7 @@ export default async function FirstLoginPage() {
       <h1 className="font-display text-4xl font-bold text-pitch">Bienvenue, {viewer.displayName}</h1>
       <p className="mt-2 text-muted">
         Vous utilisez un mot de passe temporaire. Choisissez le vôtre pour continuer : personne d&apos;autre, pas même
-        le maître, ne le connaîtra.
+        l’administrateur, ne le connaîtra.
       </p>
       <div className="mt-6 rounded-2xl bg-chalk p-5 shadow-sm">
         <PasswordForm requireCurrent={false} />

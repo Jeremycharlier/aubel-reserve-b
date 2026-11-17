@@ -27,8 +27,8 @@ export async function loginAction(_prev: ActionResult, formData: FormData): Prom
   if (!result.ok) {
     const messages = {
       invalid: "Identifiant ou mot de passe incorrect.",
-      throttled: "Trop de tentatives. Réessayez dans 15 minutes ou demandez au maître de vérifier votre compte.",
-      disabled: "Ce compte est désactivé. Contactez le maître.",
+      throttled: "Trop de tentatives. Réessayez dans 15 minutes ou demandez à l’administrateur de vérifier votre compte.",
+      disabled: "Ce compte est désactivé. Contactez l’administrateur.",
     };
     return failure(messages[result.reason]);
   }

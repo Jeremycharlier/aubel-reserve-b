@@ -24,7 +24,7 @@ export default async function InstallationPage() {
       ) : open ? (
         <>
           <p className="mt-2 text-muted">
-            Créez le compte du maître. Cette page ne fonctionne qu&apos;une seule fois et exige le code
+            Créez le compte de l’administrateur. Cette page ne fonctionne qu&apos;une seule fois et exige le code
             d&apos;installation (variable SETUP_TOKEN de Vercel).
           </p>
           <div className="mt-6 rounded-2xl bg-chalk p-5 shadow-sm">
@@ -33,7 +33,7 @@ export default async function InstallationPage() {
         </>
       ) : (
         <p className="mt-3 text-muted">
-          L&apos;installation est terminée : le compte maître existe.{" "}
+          L&apos;installation est terminée : le compte administrateur existe.{" "}
           <Link href="/connexion" className="font-semibold text-pitch">Se connecter</Link>
         </p>
       )}

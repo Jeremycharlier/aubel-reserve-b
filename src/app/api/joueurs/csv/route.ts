@@ -4,11 +4,11 @@ import { createUserClient } from "@/lib/supabase/server";
 import { toCsv } from "@/lib/csv";
 import { PLAYER_COLUMNS, ROLE_LABEL, type PlayerRow } from "@/lib/data";
 
-// Liste de l'équipe pour un usage extérieur (licences, anniversaires…). Maître uniquement.
+// Liste de l'équipe pour un usage extérieur (licences, anniversaires…). Administrateur uniquement.
 export async function GET() {
   const viewer = await getViewer();
   if (!viewer || viewer.role !== "maitre" || viewer.mustChangePassword) {
-    return NextResponse.json({ error: "Accès réservé au maître." }, { status: 403 });
+    return NextResponse.json({ error: "Accès réservé à l’administrateur." }, { status: 403 });
   }
   const supabase = await createUserClient();
   const [{ data: players }, { data: profiles }] = await Promise.all([

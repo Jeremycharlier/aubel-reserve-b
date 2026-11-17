@@ -26,7 +26,7 @@ export function InstallForm() {
         <input name="confirm" type="password" className={inputClass} required minLength={8} autoComplete="new-password" />
       </Field>
       <SubmitButton className="w-full" pendingLabel="Création…">
-        Créer le compte maître
+        Créer le compte administrateur
       </SubmitButton>
     </ActionForm>
   );
