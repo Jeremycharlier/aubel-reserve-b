@@ -47,7 +47,7 @@ export type TestPlayer = {
 
 let seq = 0;
 /** Crée des comptes joueurs via le même code que l'application, puis les connecte. */
-export async function createPlayers(n: number, prefix: string): Promise<TestPlayer[]> {
+export async function createPlayers(n: number, prefix: string, role: "joueur" | "entraineur" = "joueur"): Promise<TestPlayer[]> {
   const admin = adminClient();
   const maitre = inject("maitre");
   const out: TestPlayer[] = [];
@@ -57,6 +57,7 @@ export async function createPlayers(n: number, prefix: string): Promise<TestPlay
     const acc = await createAccount(admin, maitre.userId, DOMAIN, {
       username,
       newPlayerName: `${prefix} Joueur ${seq}`,
+      role,
     });
     const tmpClient = await login(username, acc.tempPassword);
     const password = `Nouveau-${seq}-mdp`;

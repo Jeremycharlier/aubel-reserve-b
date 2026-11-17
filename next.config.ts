@@ -24,6 +24,13 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // L'ancien espace « maître » s'appelle désormais « gestion »
+  async redirects() {
+    return [
+      { source: "/maitre", destination: "/gestion", permanent: false },
+      { source: "/maitre/:path*", destination: "/gestion/:path*", permanent: false },
+    ];
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

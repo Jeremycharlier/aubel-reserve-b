@@ -101,13 +101,19 @@ async function main() {
   await must(coach.rpc("admin_set_vote_state", { p_match_id: m1, p_state: "ouvert" }));
   for (let i = 0; i < voters.length - 1; i++) await must(voters[i].rpc("submit_ballot", { p_match_id: m1, p_selections: pick(i) }));
   await must(coach.rpc("admin_set_vote_state", { p_match_id: m1, p_state: "ferme" }));
-  await must(coach.rpc("admin_save_match_stats", {
-    p_match_id: m1, p_score_for: 3, p_score_against: 1,
-    p_rows: [
-      { player_id: all[7], goals: 2, assists: 0 }, { player_id: all[9], goals: 1, assists: 1 },
-      { player_id: all[5], assists: 2, yellow: 1 }, { player_id: all[3], yellow: 1 },
-    ],
-  }));
+  const ev = async (m: string, kind: string, player: number | null, assist: number | null, minute: number) =>
+    must(coach.rpc("add_match_event", {
+      p_match_id: m, p_kind: kind, p_player_id: player === null ? null : all[player],
+      p_assist_player_id: assist === null ? null : all[assist], p_minute: minute,
+    }));
+  await ev(m1, "but", 7, 5, 12);
+  await ev(m1, "but_adverse", null, null, 27);
+  await ev(m1, "jaune", 3, null, 38);
+  await ev(m1, "but", 9, 5, 51);
+  await ev(m1, "jaune", 5, null, 66);
+  await ev(m1, "but", 7, 9, 84);
+  await must(coach.rpc("live_control", { p_match_id: m1, p_action: "start" }));
+  await must(coach.rpc("live_control", { p_match_id: m1, p_action: "end" }));
 
   // Match 2 : joué hier, vote ouvert, fermeture programmée dans 2 jours
   const m2 = await mk("FC Herve C", -1440, 1200, "Herve");
@@ -117,18 +123,31 @@ async function main() {
   }));
   await must(coach.rpc("admin_set_vote_state", { p_match_id: m2, p_state: "ouvert" }));
   for (let i = 1; i < 7; i++) await must(voters[i].rpc("submit_ballot", { p_match_id: m2, p_selections: pick(i) }));
-  await must(coach.rpc("admin_save_match_stats", {
-    p_match_id: m2, p_score_for: 2, p_score_against: 2,
-    p_rows: [
-      { player_id: all[7], goals: 1 }, { player_id: all[2], goals: 1, assists: 1 },
-      { player_id: all[9], assists: 1 }, { player_id: all[4], yellow: 2, red: 1 },
-    ],
-  }));
+  await must(coach.rpc("admin_set_match_home", { p_match_id: m2, p_is_home: false }));
+  await ev(m2, "but", 7, null, 9);
+  await ev(m2, "but_adverse", null, null, 33);
+  await ev(m2, "but", 2, 9, 58);
+  await ev(m2, "jaune", 4, null, 61);
+  await ev(m2, "jaune", 4, null, 77);
+  await ev(m2, "rouge", 4, null, 77);
+  await ev(m2, "but_adverse", null, null, 88);
 
   // Match 3 : à venir
-  await mk("Battice FC B", 5 * 1440, 6 * 1440 + 600, "Battice");
+  // Match 3 : dans 2 jours, inscriptions ouvertes (la démo force l'ouverture)
+  const m3 = await mk("Battice FC B", 2 * 1440, 3 * 1440 + 600, "Battice");
+  await must(coach.rpc("admin_set_match_home", { p_match_id: m3, p_is_home: false }));
+  await must(coach.rpc("admin_set_match_players", { p_match_id: m3, p_player_ids: [] }));
+  // Match 4 : à domicile, la semaine suivante
+  await mk("RCS Barchon", 9 * 1440, 10 * 1440 + 600, "Aubel");
 
-  console.log("Démo prête. Maître : coach / Demo-2026 ; joueurs : thomas.kessels, julien.franssen… / Demo-2026");
+  // Compte entraîneur de démonstration
+  const coachAcc = await createAccount(admin, maitreInfo.userId, domain, {
+    username: "entraineur", role: "entraineur", newPlayerName: "Paul Entraîneur", shirtNumber: null,
+  });
+  const coachClient = await signIn("entraineur", coachAcc.tempPassword);
+  await changeOwnPassword(admin, coachClient, coachAcc.userId, "entraineur", PASSWORD);
+
+  console.log("Démo prête. Administrateur : coach ; entraîneur : entraineur ; joueurs : thomas.kessels, julien.franssen… (mot de passe Demo-2026)");
 }
 
 main().catch((e) => {

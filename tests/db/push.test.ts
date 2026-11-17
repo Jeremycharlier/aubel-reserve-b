@@ -62,7 +62,8 @@ describe("Envoi des notifications push", () => {
 
   it("envoie l'ouverture aux non-votants abonnés, une seule fois, et supprime les abonnements expirés", async () => {
     const admin = adminClient();
-    await sql("update app_settings set notify_on_open = true, reminder_hours = 3");
+    // Isolation : seules les notifications de vote sont testées ici
+    await sql("update app_settings set notify_on_open = true, reminder_hours = 3, notify_availability = false, notify_convocation = false");
     for (const [i, path] of [[0, "/sub/a"], [1, "/sub/expire"], [2, "/sub/c"]] as const) {
       const k = keys();
       await sql("insert into push_subscriptions (user_id, endpoint, p256dh, auth) values ($1, $2, $3, $4)", [

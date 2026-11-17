@@ -41,78 +41,119 @@ await j.goto(base + "/joueurs", { waitUntil: "networkidle0" });
 check((await text(j)).includes(nick) && (await text(j)).includes("Julien Franssen"), "liste des joueurs : surnom affiché avec le vrai nom en dessous");
 check((await j.$$('a[href^="/joueurs?tri="]')).length === 4, "liste des joueurs : tris buts / passes / cartons / nom");
 
-// 2. Le maître : feuille de match avec statuts, statistiques
-const b2 = await launch(); // session séparée pour le maître
+// 2. Disponibilité du joueur, puis l'entraîneur compose et valide la feuille
+const b2 = await launch(); // session séparée pour l'entraîneur
 const m = await b2.newPage(); await m.setViewport({ width: 390, height: 844 });
-await login(m, "coach", "Demo-2026");
-await m.goto(base + "/maitre/matchs", { waitUntil: "networkidle0" });
-const upcoming = await m.$$eval('a[href^="/maitre/matchs/"]', (as) => as.map((a) => [a.getAttribute("href"), a.innerText]).find(([, t]) => t.includes("Battice"))[0]);
-await m.goto(base + upcoming, { waitUntil: "networkidle0" });
+await login(m, "entraineur", "Demo-2026");
+await m.goto(base + "/gestion/matchs", { waitUntil: "networkidle0" });
+const upcoming = await m.$$eval('a[href^="/gestion/matchs/"]', (as) => as.map((a) => [a.getAttribute("href"), a.innerText]).find(([, t]) => t.includes("Battice"))[0]);
 const mid = upcoming.split("/").pop();
-const selects = await m.$$('select[name^="role_"]');
-await selects[0].select("supporter");
-await clickText(m, "button[type=submit]", "Enregistrer la feuille");
-check((await notice(m)).includes("Feuille de match enregistrée"), "feuille de match avec statut supporter");
-await m.reload({ waitUntil: "networkidle0" });
-const firstGoals = await m.$('input[name^="goals_"]');
-await firstGoals.type("2");
-const firstYellow = await m.$('input[name^="yellow_"]');
-await firstYellow.type("3");
-await m.type("input[name=score_for]", "4");
-await m.type("input[name=score_against]", "0");
-check(await firstYellow.evaluate((e) => e.validity.rangeOverflow), "contrôle : 3 cartons jaunes refusés par le formulaire");
-await firstYellow.evaluate((e) => (e.value = "1"));
-await clickText(m, "button[type=submit]", "Enregistrer score");
-check((await notice(m)).includes("Score et statistiques enregistrés"), "score et statistiques enregistrés");
+check((await text(m)).includes("Battice FC B – Aubel"), "calendrier : le club qui reçoit est cité en premier");
 
-// 3. Le joueur voit les présents, les faits du match et le score
+await j.goto(`${base}/match/${mid}`, { waitUntil: "networkidle0" });
+await clickText(j, "button[role=radio]", "Présent");
+check((await notice(j)).includes("disponible"), "joueur : disponibilité enregistrée");
+
+await m.goto(base + upcoming, { waitUntil: "networkidle0" });
+check((await text(m)).includes("Disponibilités"), "entraîneur : tableau des disponibilités");
+check(!(await text(m)).includes("Bulletins"), "entraîneur : aucun accès aux votes");
+await clickText(m, "button", "Cocher les présents");
+const selects = await m.$$('select[name^="role_"]');
+check(selects.length >= 1, "feuille : joueur présent coché");
+await clickText(m, "button[type=submit]", "Enregistrer la feuille");
+check((await notice(m)).includes("Feuille de match enregistrée"), "feuille de match enregistrée par l'entraîneur");
+await m.reload({ waitUntil: "networkidle0" });
+m.once("dialog", (d) => d.accept());
+await clickText(m, "button[type=submit]", "Valider la feuille et convoquer");
+await notice(m);
+await m.reload({ waitUntil: "networkidle0" });
+check((await text(m)).includes("Rouvrir les disponibilités"), "feuille validée (convocations)");
+await m.goto(base + "/gestion/notifications", { waitUntil: "networkidle0" });
+check(!(await text(m)).includes("Envoyer ou programmer"), "entraîneur : page notifications réservée à l'administrateur");
+
+// 3. Encodage en direct
+await m.goto(`${base}/match/${mid}/direct`, { waitUntil: "networkidle0" });
+await clickText(m, "button", "Coup d'envoi");
+await m.waitForFunction(() => document.body.innerText.includes("1re mi-temps") || document.body.innerText.includes("mi-temps"), { timeout: 15000 });
+await clickText(m, "button", "But Aubel");
+await m.waitForSelector("section[aria-label='But']");
+await m.$$eval("section[aria-label='But'] button", (bs) => bs.find((x) => /\S/.test(x.innerText) && !x.innerText.includes("inconnu") && !x.innerText.includes("Pas de passe") && x.getAttribute("aria-label") !== "Annuler").click());
+await m.$eval("section[aria-label='But'] input[type=number]", (e) => (e.value = ""));
+await m.type("section[aria-label='But'] input[type=number]", "12");
+await clickText(m, "button", "Enregistrer");
+await m.waitForFunction(() => document.body.innerText.includes("12'"), { timeout: 15000 });
+check((await text(m)).includes("0 – 1"), "direct : but à l'extérieur affiché 0 – 1 (Battice – Aubel)");
+check(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "direct : pas de défilement horizontal");
+await m.screenshot({ path: "/tmp/direct.png", fullPage: true });
+
 await j.goto(`${base}/match/${mid}`, { waitUntil: "networkidle0" });
 const jt = await text(j);
-check(jt.includes("4 – 0"), "page match : score visible");
-check(jt.includes("Présents") && jt.includes("Supporter"), "page match : présents et statuts visibles");
-check(jt.includes("Buts") && jt.includes("Cartons jaunes"), "page match : buteurs et cartons visibles");
+check(jt.includes("0 – 1") && jt.includes("12'"), "page match : score et minute visibles par le joueur");
+check(jt.includes("Tu es convoqué") || jt.includes("convoqué"), "page match : convocation visible");
 check(await j.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "page match : pas de défilement horizontal");
+
+// 3b. L'administrateur programme une notification
+const b3 = await launch();
+const a = await b3.newPage(); await a.setViewport({ width: 390, height: 844 });
+await login(a, "coach", "Demo-2026");
+await a.goto(base + "/gestion/notifications", { waitUntil: "networkidle0" });
+await a.type("input[name=title]", "Test programmé");
+await a.type("textarea[name=body]", "Message de test E2E");
+await a.select("select[name=when]", "plus_tard");
+await a.$eval("input[name=send_at]", (e) => {
+  const d = new Date(Date.now() + 86400000);
+  const p = (n) => String(n).padStart(2, "0");
+  const v = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T20:00`;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+  setter.call(e, v); e.dispatchEvent(new Event("input", { bubbles: true }));
+});
+await clickText(a, "button[type=submit]", "Programmer");
+await notice(a);
+await a.reload({ waitUntil: "networkidle0" });
+check((await text(a)).includes("Test programmé") && (await text(a)).includes("Programmé"), "administrateur : notification programmée listée");
+await a.screenshot({ path: "/tmp/notifications.png", fullPage: true });
 
 // 4. Import d'un calendrier CSV
 const dir = mkdtempSync(path.join(tmpdir(), "cal-"));
 const csv = path.join(dir, "calendrier.csv");
 writeFileSync(csv, "﻿date;heure;adversaire;lieu;classement\n14/03/2027;15:00;Import Test A;Aubel;oui\n21/03/2027;14h30;Import Test B;;non\n99/03/2027;15:00;Ligne fausse;;\n");
-await m.goto(base + "/maitre/matchs/import", { waitUntil: "networkidle0" });
-await (await m.$("input[type=file]")).uploadFile(csv);
-await clickText(m, "button[type=submit]", "Vérifier le fichier");
-await m.waitForFunction(() => document.body.innerText.includes("à corriger"), { timeout: 15000 });
-check((await text(m)).includes("Ligne 4"), "import : ligne invalide signalée avec son numéro");
+await a.goto(base + "/gestion/matchs/import", { waitUntil: "networkidle0" });
+await (await a.$("input[type=file]")).uploadFile(csv);
+await clickText(a, "button[type=submit]", "Vérifier le fichier");
+await a.waitForFunction(() => document.body.innerText.includes("à corriger"), { timeout: 15000 });
+check((await text(a)).includes("Ligne 4"), "import : ligne invalide signalée avec son numéro");
 writeFileSync(csv, "﻿date;heure;adversaire;lieu;classement\n14/03/2027;15:00;Import Test A;Aubel;oui\n21/03/2027;14h30;Import Test B;;non\n");
-await (await m.$("input[type=file]")).uploadFile(csv);
-await clickText(m, "button[type=submit]", "Vérifier le fichier");
-await m.waitForFunction(() => document.body.innerText.includes("prêts à importer"), { timeout: 15000 });
-await clickText(m, "button", "Importer 2 matchs");
-await m.waitForFunction(() => document.body.innerText.includes("2 matchs créés"), { timeout: 15000 });
+await (await a.$("input[type=file]")).uploadFile(csv);
+await clickText(a, "button[type=submit]", "Vérifier le fichier");
+await a.waitForFunction(() => document.body.innerText.includes("prêts à importer"), { timeout: 15000 });
+await clickText(a, "button", "Importer 2 matchs");
+await a.waitForFunction(() => document.body.innerText.includes("2 matchs créés"), { timeout: 15000 });
 check(true, "import : 2 matchs créés");
-const dl = await m.evaluate(async () => {
+const dl = await a.evaluate(async () => {
   const r = await fetch("/api/modele-calendrier?format=xlsx");
   return { status: r.status, type: r.headers.get("content-type"), size: (await r.arrayBuffer()).byteLength };
 });
 check(dl.status === 200 && dl.type.includes("spreadsheetml") && dl.size > 3000, "modèle Excel téléchargeable");
 
 // 5. Suppression d'un match avec votes : confirmation SUPPRIMER
-await m.goto(base + "/maitre/matchs", { waitUntil: "networkidle0" });
-const voted = await m.$$eval('a[href^="/maitre/matchs/"]', (as) => as.map((a) => [a.getAttribute("href"), a.innerText]).find(([, t]) => t.includes("Warsage"))[0]);
-await m.goto(base + voted, { waitUntil: "networkidle0" });
-const del = async () => m.$$eval("button[type=submit]", (bs) => bs.find((x) => x.innerText.includes("Supprimer le match")).disabled);
+await a.goto(base + "/gestion/matchs", { waitUntil: "networkidle0" });
+const voted = await a.$$eval('a[href^="/gestion/matchs/"]', (as) => as.map((a) => [a.getAttribute("href"), a.innerText]).find(([, t]) => t.includes("Warsage"))[0]);
+await a.goto(base + voted, { waitUntil: "networkidle0" });
+const del = async () => a.$$eval("button[type=submit]", (bs) => bs.find((x) => x.innerText.includes("Supprimer le match")).disabled);
 check(await del(), "suppression bloquée tant que SUPPRIMER n'est pas tapé");
-await m.type("input[name=confirm]", "supprimer");
+await a.type("input[name=confirm]", "supprimer");
 check(!(await del()), "bouton actif après confirmation");
-m.once("dialog", (d) => d.accept());
-await Promise.all([m.waitForNavigation({ waitUntil: "networkidle0" }), clickText(m, "button[type=submit]", "Supprimer le match")]);
-check(!(await text(m)).includes("Warsage"), "match avec votes supprimé");
-await m.goto(base + "/maitre/journal", { waitUntil: "networkidle0" });
-check((await text(m)).includes("Suppression de match"), "suppression inscrite au journal");
+a.once("dialog", (d) => d.accept());
+await Promise.all([a.waitForNavigation({ waitUntil: "networkidle0" }), clickText(a, "button[type=submit]", "Supprimer le match")]);
+check(!(await text(a)).includes("Warsage"), "match avec votes supprimé");
+await a.goto(base + "/gestion/journal", { waitUntil: "networkidle0" });
+check((await text(a)).includes("Suppression de match"), "suppression inscrite au journal");
 
-// 6. Export CSV de l'équipe (maître) refusé au joueur
-const csvRes = await m.evaluate(async () => { const r = await fetch("/api/joueurs/csv"); return { s: r.status, t: await r.text() }; });
+// 6. Export CSV de l'équipe (administrateur) refusé au joueur
+const csvRes = await a.evaluate(async () => { const r = await fetch("/api/joueurs/csv"); return { s: r.status, t: await r.text() }; });
 check(csvRes.s === 200 && csvRes.t.includes("Date de naissance"), "export CSV de l'équipe (maître)");
 check((await j.evaluate(async () => (await fetch("/api/joueurs/csv")).status)) === 403, "export CSV refusé au joueur");
 
 await b.close();
 await b2.close();
+await b3.close();

@@ -135,15 +135,12 @@ describe("Améliorations : surnom, statuts, stats, suppression, import, notifica
     });
 
     it("le maître saisit score, buts, passes et cartons ; tout le monde les lit", async () => {
-      const { error } = await maitre.rpc("admin_save_match_stats", {
-        p_match_id: m, p_score_for: 3, p_score_against: 1,
-        p_rows: [
-          { player_id: ids[0], goals: 2, assists: 0, yellow: 1, red: 0 },
-          { player_id: ids[1], goals: 1, assists: 2, yellow: 0, red: 0 },
-          { player_id: ids[2], goals: 0, assists: 0, yellow: 0, red: 0 },
-        ],
-      });
-      expect(error).toBeNull();
+      const ev = (kind: string, player: string | null, assist: string | null = null, minute: number | null = 10) =>
+        maitre.rpc("add_match_event", { p_match_id: m, p_kind: kind, p_player_id: player, p_assist_player_id: assist, p_minute: minute });
+      for (const call of [
+        ev("but", ids[0], ids[1], 12), ev("but", ids[0], ids[1], 30), ev("but", ids[1], null, 55),
+        ev("jaune", ids[0], null, 60), ev("but_adverse", null, null, 70),
+      ]) expect((await call).error).toBeNull();
       const { data } = await p[5].client.from("match_stats").select("player_id, goals, assists, yellow_cards, red_cards").eq("match_id", m);
       expect(data).toHaveLength(2); // les lignes vides ne sont pas stockées
       const { data: mt } = await p[5].client.from("v_matches").select("score_for, score_against").eq("id", m).single();
@@ -151,21 +148,15 @@ describe("Améliorations : surnom, statuts, stats, suppression, import, notifica
     });
 
     it("contrôles : pas plus de 2 jaunes / 1 rouge, joueur absent refusé, joueurs sans droit d'écriture", async () => {
-      const bad = await maitre.rpc("admin_save_match_stats", {
-        p_match_id: m, p_score_for: 0, p_score_against: 0,
-        p_rows: [{ player_id: ids[0], goals: 0, assists: 0, yellow: 3, red: 0 }],
-      });
-      expect(bad.error?.message).toBe("STATS_INVALID");
+      const ev = (kind: string, player: string | null, client = maitre) =>
+        client.rpc("add_match_event", { p_match_id: m, p_kind: kind, p_player_id: player, p_assist_player_id: null, p_minute: 80 });
+      expect((await ev("jaune", ids[0])).error).toBeNull(); // 2e jaune
+      expect((await ev("jaune", ids[0])).error?.message).toBe("STATS_INVALID"); // 3e refusé
       const [outsider] = await createPlayers(1, "absent");
-      const absent = await maitre.rpc("admin_save_match_stats", {
-        p_match_id: m, p_score_for: 0, p_score_against: 0,
-        p_rows: [{ player_id: outsider.playerId, goals: 1 }],
-      });
-      expect(absent.error?.message).toBe("STATS_NOT_IN_SQUAD");
-      // Les données précédentes sont intactes
-      expect(await sql("select 1 from match_stats where match_id = $1", [m])).toHaveLength(2);
-      const w = await p[0].client.rpc("admin_save_match_stats", { p_match_id: m, p_score_for: 9, p_score_against: 0, p_rows: [] });
-      expect(w.error?.message).toBe("FORBIDDEN");
+      expect((await ev("but", outsider.playerId)).error?.message).toBe("STATS_NOT_IN_SQUAD");
+      expect((await sql<{ goals: number }>("select goals from match_stats where match_id = $1 and player_id = $2", [m, ids[0]]))[0].goals).toBe(2);
+      // Un simple joueur (non délégué) ne peut pas encoder
+      expect((await ev("but", ids[4], p[4].client)).error?.message).toBe("FORBIDDEN");
       const ins = await p[0].client.from("match_stats").insert({ match_id: m, player_id: ids[0], goals: 5 });
       expect(ins.error?.code).toBe("42501");
     });
@@ -178,7 +169,7 @@ describe("Améliorations : surnom, statuts, stats, suppression, import, notifica
       await vote(p[0].client, m, [ids[1], ids[2], ids[4]]);
       await sql("update matches set vote_deadline = now() - interval '1 minute' where id = $1", [m]);
       await vote(p[1].client, m, [ids[0], ids[2], ids[4]]);
-      await maitre.rpc("admin_save_match_stats", { p_match_id: m, p_score_for: 1, p_score_against: 0, p_rows: [{ player_id: ids[0], goals: 1 }] });
+      await maitre.rpc("add_match_event", { p_match_id: m, p_kind: "but", p_player_id: ids[0], p_assist_player_id: null, p_minute: 5 });
       const season = await currentSeasonId(maitre);
       const before = (await maitre.rpc("admin_season_standings", { p_season_id: season })).data as { player_id: string; gross_points: number }[];
       const grossBefore = before.find((r) => r.player_id === ids[1])!.gross_points;

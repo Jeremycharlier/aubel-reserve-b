@@ -18,7 +18,7 @@ const suffix = Date.now().toString(36);
 // 1. Le maître crée un compte joueur
 const b1 = await launch(); const m = await b1.newPage(); await m.setViewport({ width: 390, height: 844 });
 await login(m, "coach", "Demo-2026");
-await m.goto(base + "/maitre/equipe", { waitUntil: "networkidle0" });
+await m.goto(base + "/gestion/equipe", { waitUntil: "networkidle0" });
 await m.type("input[name=new_player_name]", `Essai ${suffix}`);
 await m.type("input[name=username]", `essai.${suffix}`);
 await m.$$eval("button[type=submit]", (bs) => bs.find((x) => x.innerText.includes("Créer le compte")).click());
@@ -27,7 +27,7 @@ const temp = (await m.evaluate(() => document.body.innerText)).match(/[A-Z2-9]{4
 check(!!temp, "création de compte avec mot de passe temporaire");
 
 // 2. Export PDF par le maître
-const season = await m.evaluate(async () => (await (await fetch("/maitre/classement")).text()).match(/api\/classement\/pdf\?saison=([0-9a-f-]{36})/)[1]);
+const season = await m.evaluate(async () => (await (await fetch("/gestion/classement")).text()).match(/api\/classement\/pdf\?saison=([0-9a-f-]{36})/)[1]);
 const pdf = await m.evaluate(async (s) => { const r = await fetch("/api/classement/pdf?saison=" + s); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, head: String.fromCharCode(...b.slice(0, 5)) }; }, season);
 check(pdf.status === 200 && pdf.head === "%PDF-", "export PDF du classement (maître)");
 
@@ -41,7 +41,7 @@ await Promise.all([p.waitForNavigation({ waitUntil: "networkidle0" }), p.click("
 check(p.url() === base + "/", "accès à l'accueil après changement");
 
 // 4. Le joueur n'accède ni à l'administration ni au PDF
-await p.goto(base + "/maitre/classement", { waitUntil: "networkidle0" });
+await p.goto(base + "/gestion/classement", { waitUntil: "networkidle0" });
 check((await p.evaluate(() => document.querySelector("h1")?.innerText)) === "Page introuvable", "classement maître refusé au joueur");
 check((await p.evaluate(async (s) => (await fetch("/api/classement/pdf?saison=" + s)).status, season)) === 403, "PDF refusé au joueur (403)");
 

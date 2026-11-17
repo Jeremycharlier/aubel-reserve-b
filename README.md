@@ -158,8 +158,8 @@ Comptes de démonstration : maître `coach`, joueurs `thomas.kessels`,
 
 ```bash
 npm run typecheck && npm run lint
-npm run test:unit      # 28 tests : sélection 3/2/1, fuseau horaire, mots de passe, PDF, import Excel/CSV
-npm run test:db        # 69 tests contre une vraie pile Supabase locale (option B ci-dessus)
+npm run test:unit      # 32 tests : sélection 3/2/1, fuseau horaire, mots de passe, PDF, import Excel/CSV
+npm run test:db        # 82 tests contre une vraie pile Supabase locale (option B ci-dessus)
 npm run test:e2e       # parcours navigateur (application lancée + seed:demo, CHROME_PATH requis)
 node tests/e2e/ameliorations.mjs   # surnom, statuts, stats, import, suppression (idem)
 ```
@@ -187,8 +187,9 @@ notamment :
   match hors classement, bulletin annulé non compté, correction journalisée,
   journal immuable.
 
-Résultat au 29/10/2026 : **97 tests automatisés réussis** (28 unitaires,
-69 base de données, dont l'envoi réel de notifications chiffrées vers un faux
+Résultat au 17/11/2026 : **114 tests automatisés réussis** (32 unitaires,
+82 base de données, dont rôle entraîneur, disponibilités, convocations, chrono
+et minutes, faits de match, notifications programmées, dont l'envoi réel de notifications chiffrées vers un faux
 service de push) et les deux parcours navigateur réussis (création de compte,
 première connexion, vote 3/2/1, PDF, refus d'accès joueur, déconnexion, surnom,
 feuille avec supporter, statistiques, import CSV, suppression confirmée, export
@@ -415,3 +416,43 @@ règle peut être « manuelle »).
 
 Ordre important : la base (étape 1) **avant** le code (étape 3), sinon le
 nouveau site cherchera des colonnes qui n'existent pas encore.
+
+## 12. Mise à jour du 17 novembre 2026
+
+### Ce qui change
+
+| Fonction | Où | Règle |
+| --- | --- | --- |
+| Rôle **Entraîneur** | Administration → Équipe → fiche du membre → « Nommer entraîneur » | Gère matchs, calendrier, import, feuilles de match, convocations, faits de match, ouverture/fermeture des votes. **Ne voit pas** les votes, malus, classement détaillé ni les réglages de saison. Vote et apparaît au classement comme un joueur. Seul l'administrateur nomme ou retire un entraîneur. |
+| « Maître » → **Administrateur** | Partout | L'espace de gestion s'appelle désormais `/gestion` (l'ancienne adresse `/maitre` redirige). |
+| **Convocations** | Accueil, page du match ; Administration → fiche du match | Les inscriptions s'ouvrent le **lundi 9 h** de la semaine du match (match le lundi : lundi précédent). Chaque joueur répond Présent / Incertain / Absent (+ commentaire), modifiable jusqu'à la validation de la feuille. L'entraîneur ou l'administrateur coche les présents (« Cocher les présents »), enregistre la feuille puis **valide** : les joueurs retenus sont convoqués. « Rouvrir les disponibilités » annule la validation. |
+| **Faits de match en direct** | Page du match → « Encoder en direct » | Pour l'entraîneur, l'administrateur et le délégué (statut par défaut ou sur la feuille). Coup d'envoi → Mi-temps → 2e mi-temps → Fin. But (buteur, passe facultative), but adverse, cartons : la minute est calculée par le chrono et reste modifiable (temps additionnel affiché 45+2'). Sans chrono, on encode en tapant la minute. Score, buts, passes et cartons sont recalculés automatiquement ; la page du match se rafraîchit seule pour les joueurs. |
+| **Domicile / extérieur** | Fiche du match, import (colonne `domicile`) | Le club qui reçoit est cité en premier, score dans le même ordre : « Aubel – Barchon » à domicile, « Barchon – Aubel » à l'extérieur. Import : colonne `domicile` (oui/non) ou, si vide, déduit du lieu (contient « Aubel » ou vide = domicile). Nom du club : Réglages. |
+| **Notifications** | Administration → Plus → Notifications (administrateur) | Explication des 5 types, envoi immédiat ou **programmé** d'un message libre (toute l'équipe, joueurs d'une feuille, ou soi-même pour tester), annulation, réglages, et **état du système** (abonnés, planificateur, derniers appels). |
+
+### Les notifications automatiques
+
+| Type | Quand | À qui |
+| --- | --- | --- |
+| Inscriptions ouvertes | Lundi 9 h de la semaine du match | Membres actifs sans réponse |
+| Convocation | Validation de la feuille | Joueurs retenus |
+| Vote ouvert | Ouverture du vote | Joueurs de la feuille qui n'ont pas voté |
+| Rappel de vote | X h avant l'heure limite (3 h par défaut) | Ceux qui n'ont toujours pas voté |
+| Message libre | Maintenant ou à l'heure choisie | Selon le choix |
+
+Mécanique : toutes les 10 minutes, la base (pg_cron) regarde si quelque chose
+est dû ; si oui, elle appelle le site (pg_net) qui envoie les notifications.
+Le décalage maximal est donc de 10 minutes. En secours, Vercel appelle aussi
+le site une fois par jour. Seuls les appareils sur lesquels le membre a
+activé les notifications (Profil) les reçoivent ; sur iPhone, l'application
+doit être installée sur l'écran d'accueil.
+
+### Mettre à jour une installation existante
+
+1. **Supabase → SQL Editor** : coller `supabase/mise-a-jour-2026-11-17.sql`,
+   **Run** (une seule fois). Attendu : « Success. No rows returned ».
+2. **GitHub** : **supprimer** le dossier `src/app/maitre` (il est remplacé par
+   `src/app/gestion`), puis déposer les fichiers mis à jour.
+3. **Vercel** redéploie automatiquement.
+4. Ouvrir Administration → Plus → **Notifications** : la section « État du
+   système » doit être entièrement verte une fois des joueurs abonnés.

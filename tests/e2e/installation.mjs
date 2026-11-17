@@ -16,7 +16,7 @@ await fill("mauvais-code-mauvais-code");
 await p.waitForSelector("[role=alert]", { timeout: 15000 });
 check((await p.$eval("[role=alert]", (e) => e.innerText)).includes("incorrect"), "code d'installation erroné refusé");
 await fill(process.env.SETUP_TOKEN);
-await p.waitForFunction(() => location.pathname === "/maitre/reglages", { timeout: 15000 });
+await p.waitForFunction(() => location.pathname === "/gestion/reglages", { timeout: 15000 });
 check(true, "compte maître créé et connecté");
 await p.goto(base + "/installation", { waitUntil: "networkidle0" });
 const txt = await p.evaluate(() => document.body.innerText);
