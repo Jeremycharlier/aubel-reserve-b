@@ -18,7 +18,33 @@ export type MatchRow = {
   score_for: number | null;
   score_against: number | null;
   effective_state: VoteState;
+  is_home: boolean;
+  club_name: string;
+  live_status: LiveStatus | null;
+  live_started_at: string | null;
+  first_half_ended_at: string | null;
+  second_half_started_at: string | null;
+  live_ended_at: string | null;
+  sheet_validated_at: string | null;
+  availability_opens_at: string;
+  availability_state: AvailabilityState;
 };
+
+export type LiveStatus = "premiere" | "mi_temps" | "seconde" | "termine";
+export type AvailabilityState = "a_venir" | "ouverte" | "validee" | "fermee";
+export type Availability = "present" | "absent" | "incertain";
+
+/** « Aubel – Barchon » à domicile, « Barchon – Aubel » à l'extérieur. */
+export function matchTitle(m: Pick<MatchRow, "opponent" | "is_home"> & { club_name?: string | null }): string {
+  const club = m.club_name || "Aubel";
+  return m.is_home === false ? `${m.opponent} – ${club}` : `${club} – ${m.opponent}`;
+}
+
+/** Score dans l'ordre d'affichage (équipe à domicile d'abord). */
+export function scoreText(m: Pick<MatchRow, "score_for" | "score_against" | "is_home">): string | null {
+  if (m.score_for == null || m.score_against == null) return null;
+  return m.is_home === false ? `${m.score_against} – ${m.score_for}` : `${m.score_for} – ${m.score_against}`;
+}
 
 export type PlayerRole = "joueur" | "delegue" | "supporter";
 

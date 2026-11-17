@@ -3,7 +3,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createUserClient } from "@/lib/supabase/server";
 
-export type Role = "maitre" | "joueur";
+export type Role = "maitre" | "entraineur" | "joueur";
 
 export type Viewer = {
   userId: string;
@@ -51,9 +51,26 @@ export async function requireViewer(options: { allowPasswordChange?: boolean } =
   return viewer;
 }
 
-/** Réservé au maître : toute autre personne reçoit une page 404. */
+/** Réservé à l’administrateur : toute autre personne reçoit une page 404. */
 export async function requireMaitre(): Promise<Viewer> {
   const viewer = await requireViewer();
   if (viewer.role !== "maitre") notFound();
   return viewer;
 }
+
+export function isStaffRole(role: Role): boolean {
+  return role === "maitre" || role === "entraineur";
+}
+
+/** Administrateur ou entraîneur (gestion des matchs). */
+export async function requireStaff(): Promise<Viewer> {
+  const viewer = await requireViewer();
+  if (!isStaffRole(viewer.role)) notFound();
+  return viewer;
+}
+
+export const ROLE_TITLE: Record<Role, string> = {
+  maitre: "Administrateur",
+  entraineur: "Entraîneur",
+  joueur: "Joueur",
+};

@@ -32,7 +32,7 @@ export async function readFirstSheet(buffer: ArrayBuffer): Promise<string[][]> {
   const rows: string[][] = [];
   ws.eachRow({ includeEmpty: false }, (row) => {
     const cells: string[] = [];
-    for (let c = 1; c <= Math.max(row.cellCount, 8); c++) cells.push(cellText(row.getCell(c).value).trim());
+    for (let c = 1; c <= Math.max(row.cellCount, 9); c++) cells.push(cellText(row.getCell(c).value).trim());
     rows.push(cells);
   });
   return rows.slice(0, 501);
@@ -47,7 +47,7 @@ export async function buildTemplate(headers: readonly string[], example: string[
   ws.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0E4D2F" } };
   ws.columns.forEach((c, i) => {
-    c.width = [12, 8, 26, 14, 11, 18, 18, 18][i] ?? 14;
+    c.width = [12, 8, 26, 14, 10, 11, 18, 18, 18][i] ?? 14;
     c.numFmt = "@"; // texte : Excel ne transforme pas les dates
   });
   const help = wb.addWorksheet("Mode d'emploi");
@@ -57,6 +57,7 @@ export async function buildTemplate(headers: readonly string[], example: string[
     ["heure", "oui", "HH:MM (heure belge)", "15:00"],
     ["adversaire", "oui", "texte", "FC Herve C"],
     ["lieu", "non", "texte", "Aubel"],
+    ["domicile", "non", "oui / non", "oui = Aubel reçoit (vide : déduit du lieu)"],
     ["classement", "non (oui par défaut)", "oui / non", "non pour un amical"],
     ["ouverture_vote", "non", "JJ/MM/AAAA HH:MM", "vide = règle choisie à l'import"],
     ["heure_limite", "non", "JJ/MM/AAAA HH:MM", "vide = règle choisie à l'import"],

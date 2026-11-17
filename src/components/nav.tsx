@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   CalendarDays,
   ClipboardList,
   History,
@@ -28,6 +29,7 @@ const ICONS: Record<string, LucideIcon> = {
   results: ClipboardList,
   team: Users,
   more: Menu,
+  bell: Bell,
 };
 
 export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; exact?: boolean };

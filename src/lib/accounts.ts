@@ -1,6 +1,6 @@
 // Opérations sur les comptes. Les fonctions reçoivent leurs clients en
 // paramètre (testables contre une vraie pile Supabase) et vérifient
-// systématiquement le rôle maître de l'auteur côté base.
+// systématiquement le rôle administrateur de l'auteur côté base.
 import { randomInt } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -48,7 +48,7 @@ async function assertMaitre(admin: SupabaseClient, actorId: string) {
 
 export type CreateAccountInput = {
   username: string;
-  role?: "joueur" | "maitre";
+  role?: "joueur" | "entraineur" | "maitre";
   playerId?: string | null;
   newPlayerName?: string | null;
   shirtNumber?: number | null;
@@ -187,7 +187,18 @@ export async function loginWithUsername(
   return { ok: true };
 }
 
-/** Création du premier compte maître (au déploiement, via scripts/create-maitre.ts). */
+export async function setAccountRole(
+  admin: SupabaseClient,
+  actorId: string,
+  userId: string,
+  role: "joueur" | "entraineur",
+): Promise<void> {
+  await assertMaitre(admin, actorId);
+  const { error } = await admin.rpc("svc_set_account_role", { p_actor: actorId, p_user_id: userId, p_role: role });
+  if (error) throw new AccountError(error.message);
+}
+
+/** Création du premier compte administrateur (au déploiement, via scripts/create-maitre.ts). */
 export async function bootstrapMaitre(
   admin: SupabaseClient,
   domain: string,
@@ -198,7 +209,7 @@ export async function bootstrapMaitre(
   const invalid = validateNewPassword(input.password, username);
   if (invalid) throw new AccountError(invalid);
   const { count } = await admin.from("profiles").select("user_id", { count: "exact", head: true }).eq("role", "maitre");
-  if ((count ?? 0) > 0) throw new AccountError("Un compte maître existe déjà.");
+  if ((count ?? 0) > 0) throw new AccountError("Un compte administrateur existe déjà.");
 
   const { data: created, error } = await admin.auth.admin.createUser({
     email: usernameToEmail(username, domain),

@@ -2,6 +2,7 @@ import "server-only";
 import webpush from "web-push";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtDateTime } from "@/lib/time";
+import { matchTitle } from "@/lib/data";
 
 // Notifications push (norme Web Push). Les clés VAPID sont générées une
 // seule fois et conservées dans la base (table app_secrets, service seul) :
@@ -75,55 +76,115 @@ async function sendToSubscriptions(
   return { report, deliveredUsers };
 }
 
-type Pending = { user_id: string; match_id: string; kind: "ouverture" | "rappel"; opponent: string; vote_deadline: string };
+type Pending = {
+  user_id: string;
+  match_id: string;
+  kind: "ouverture" | "rappel" | "dispo" | "convocation";
+  opponent: string;
+  is_home: boolean;
+  kickoff_at: string;
+  vote_deadline: string;
+};
 
-/** Envoie les notifications d'ouverture et de rappel dues maintenant. */
+function messageFor(p: Pending, club: string): PushMessage {
+  const title = matchTitle({ opponent: p.opponent, is_home: p.is_home, club_name: club });
+  switch (p.kind) {
+    case "dispo":
+      return {
+        title: "Inscriptions ouvertes",
+        body: `${title}, ${fmtDateTime(p.kickoff_at)} : indique si tu es disponible.`,
+        url: `/match/${p.match_id}`,
+        tag: `dispo-${p.match_id}`,
+      };
+    case "convocation":
+      return {
+        title: "Tu es convoqué",
+        body: `${title}, ${fmtDateTime(p.kickoff_at)}.`,
+        url: `/match/${p.match_id}`,
+        tag: `convocation-${p.match_id}`,
+      };
+    case "rappel":
+      return {
+        title: "N'oublie pas de voter",
+        body: `${title} : heure limite ${fmtDateTime(p.vote_deadline)}. Ensuite, ton vote sera compté en retard.`,
+        url: `/vote/${p.match_id}`,
+        tag: `rappel-${p.match_id}`,
+      };
+    default:
+      return {
+        title: "Le vote est ouvert",
+        body: `${title} : désigne tes 3 meilleurs coéquipiers avant ${fmtDateTime(p.vote_deadline)}.`,
+        url: `/vote/${p.match_id}`,
+        tag: `vote-${p.match_id}`,
+      };
+  }
+}
+
+async function clubName(admin: SupabaseClient): Promise<string> {
+  const { data } = await admin.from("app_settings").select("club_name").eq("id", 1).maybeSingle();
+  return (data?.club_name as string | undefined) ?? "Aubel";
+}
+
+/** Envoie les notifications automatiques dues maintenant (une par fait). */
 export async function sendPendingNotifications(admin: SupabaseClient, origin: string): Promise<SendReport & { pending: number }> {
   const { data, error } = await admin.rpc("svc_pending_notifications");
   if (error) throw new Error(error.message);
   const pending = (data ?? []) as Pending[];
   if (pending.length === 0) return { sent: 0, failed: 0, removed: 0, pending: 0 };
 
+  const club = await clubName(admin);
   const userIds = [...new Set(pending.map((p) => p.user_id))];
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("id, user_id, endpoint, p256dh, auth, failures")
     .in("user_id", userIds);
-
-  // Un message par utilisateur (le plus urgent si plusieurs matchs)
-  const byUser = new Map<string, Pending>();
-  for (const p of pending) {
-    const cur = byUser.get(p.user_id);
-    if (!cur || (p.kind === "rappel" && cur.kind !== "rappel")) byUser.set(p.user_id, p);
-  }
-  const { report } = await sendToSubscriptions(
-    admin,
-    (subs ?? []) as Subscription[],
-    (s) => {
-      const p = byUser.get(s.user_id)!;
-      return p.kind === "rappel"
-        ? {
-            title: "N'oublie pas de voter",
-            body: `Aubel B – ${p.opponent} : heure limite ${fmtDateTime(p.vote_deadline)}. Ensuite, ton vote sera compté en retard.`,
-            url: `/vote/${p.match_id}`,
-            tag: `rappel-${p.match_id}`,
-          }
-        : {
-            title: "Le vote est ouvert",
-            body: `Aubel B – ${p.opponent} : désigne tes 3 meilleurs coéquipiers avant ${fmtDateTime(p.vote_deadline)}.`,
-            url: `/vote/${p.match_id}`,
-            tag: `vote-${p.match_id}`,
-          };
-    },
-    origin,
-  );
-  // Marqués comme traités même si l'envoi a échoué, pour ne pas insister
+  const total: SendReport = { sent: 0, failed: 0, removed: 0 };
+  // Marqués comme traités avant l'envoi pour ne jamais envoyer deux fois
   await admin.rpc("svc_mark_notified", {
     p_user_ids: pending.map((p) => p.user_id),
     p_match_ids: pending.map((p) => p.match_id),
     p_kinds: pending.map((p) => p.kind),
   });
-  return { ...report, pending: pending.length };
+  for (const p of pending) {
+    const mine = ((subs ?? []) as Subscription[]).filter((s) => s.user_id === p.user_id);
+    if (mine.length === 0) continue;
+    const { report } = await sendToSubscriptions(admin, mine, () => messageFor(p, club), origin);
+    total.sent += report.sent;
+    total.failed += report.failed;
+    total.removed += report.removed;
+  }
+  return { ...total, pending: pending.length };
+}
+
+type Scheduled = { id: string; title: string; body: string; url: string };
+
+/** Envoie les notifications libres programmées arrivées à échéance. */
+export async function sendScheduledNotifications(admin: SupabaseClient, origin: string): Promise<SendReport & { batches: number }> {
+  const { data, error } = await admin.rpc("svc_claim_scheduled_notifications");
+  if (error) throw new Error(error.message);
+  const claimed = (data ?? []) as Scheduled[];
+  const total: SendReport = { sent: 0, failed: 0, removed: 0 };
+  for (const n of claimed) {
+    const { data: users } = await admin.rpc("svc_scheduled_recipients", { p_id: n.id });
+    const ids = ((users ?? []) as (string | { svc_scheduled_recipients: string })[]).map((u) =>
+      typeof u === "string" ? u : u.svc_scheduled_recipients,
+    );
+    let report: SendReport = { sent: 0, failed: 0, removed: 0 };
+    if (ids.length) {
+      const { data: subs } = await admin
+        .from("push_subscriptions")
+        .select("id, user_id, endpoint, p256dh, auth, failures")
+        .in("user_id", ids);
+      report = (
+        await sendToSubscriptions(admin, (subs ?? []) as Subscription[], () => ({ title: n.title, body: n.body, url: n.url, tag: `msg-${n.id}` }), origin)
+      ).report;
+    }
+    await admin.rpc("svc_finish_scheduled", { p_id: n.id, p_sent: report.sent, p_failed: report.failed });
+    total.sent += report.sent;
+    total.failed += report.failed;
+    total.removed += report.removed;
+  }
+  return { ...total, batches: claimed.length };
 }
 
 /** Notification de test vers les appareils d'un utilisateur. */

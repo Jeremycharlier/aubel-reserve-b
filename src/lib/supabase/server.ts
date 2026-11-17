@@ -26,7 +26,7 @@ export async function createUserClient(): Promise<SupabaseClient> {
 
 /**
  * Client « service » : contourne la RLS. Réservé aux opérations serveur
- * précédées d'une vérification explicite du rôle maître.
+ * précédées d'une vérification explicite du rôle administrateur.
  */
 export function createServiceClient(): SupabaseClient {
   const { supabaseUrl } = publicEnv();

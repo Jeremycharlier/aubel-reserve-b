@@ -7,6 +7,7 @@ export const TEMPLATE_HEADERS = [
   "heure",
   "adversaire",
   "lieu",
+  "domicile",
   "classement",
   "ouverture_vote",
   "heure_limite",
@@ -14,9 +15,9 @@ export const TEMPLATE_HEADERS = [
 ] as const;
 
 export const TEMPLATE_EXAMPLE: string[][] = [
-  ["08/11/2026", "15:00", "FC Herve C", "Herve", "oui", "", "", ""],
-  ["15/11/2026", "14:30", "RFC Warsage B", "Aubel", "oui", "15/11/2026 17:00", "17/11/2026 20:00", "18/11/2026 20:00"],
-  ["22/11/2026", "15:00", "Battice FC B (amical)", "Battice", "non", "", "", ""],
+  ["08/11/2026", "15:00", "FC Herve C", "Herve", "non", "oui", "", "", ""],
+  ["15/11/2026", "14:30", "RFC Warsage B", "Aubel", "oui", "oui", "15/11/2026 17:00", "17/11/2026 20:00", "18/11/2026 20:00"],
+  ["22/11/2026", "15:00", "Battice FC B (amical)", "Battice", "non", "non", "", "", ""],
 ];
 
 export type ImportDefaults = {
@@ -35,6 +36,7 @@ export type ImportedMatch = {
   deadline: string;
   closes: string | null;
   counts: boolean;
+  home: boolean;
 };
 
 export type ImportResult = { matches: ImportedMatch[]; errors: { line: number; message: string }[] };
@@ -61,6 +63,9 @@ const ALIASES: Record<string, (typeof TEMPLATE_HEADERS)[number]> = {
   contre: "adversaire",
   lieu: "lieu",
   terrain: "lieu",
+  domicile: "domicile",
+  a_domicile: "domicile",
+  dom: "domicile",
   classement: "classement",
   compte_au_classement: "classement",
   ouverture_vote: "ouverture_vote",
@@ -192,6 +197,11 @@ export function rowsToMatches(table: string[][], defaults: ImportDefaults): Impo
 
     const counts = yes(get("classement"));
     if (counts === null) return errors.push({ line, message: "Colonne classement : indiquez oui ou non." });
+    // Domicile : colonne explicite, sinon déduit du lieu (contient « aubel » ou vide = domicile)
+    const domRaw = get("domicile");
+    const lieu = get("lieu");
+    const home = domRaw ? yes(domRaw) : !lieu || /aubel/i.test(lieu);
+    if (home === null) return errors.push({ line, message: "Colonne domicile : indiquez oui ou non." });
 
     matches.push({
       line,
@@ -202,6 +212,7 @@ export function rowsToMatches(table: string[][], defaults: ImportDefaults): Impo
       deadline: formatLocal(deadline),
       closes: closes ? formatLocal(closes) : null,
       counts,
+      home,
     });
   });
 
